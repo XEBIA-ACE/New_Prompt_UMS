@@ -1,6 +1,3 @@
-# UserManagementSystem
-User Management System
-
 # Running the User Management Service Locally
 
 The repo is split into two independently run apps:

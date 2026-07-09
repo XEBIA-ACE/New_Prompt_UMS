@@ -5,6 +5,7 @@
  * Concrete adapters (e.g. SendGridEmailAdapter) implement this interface.
  *
  * Requirements: US-073 ADR-002, FR-004–005, FR-012
+ * test
  */
 
 import { DeliveryResult, EmailRecipient } from '../types/registration.types';

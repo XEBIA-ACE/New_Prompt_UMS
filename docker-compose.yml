@@ -1,0 +1,43 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./BACKEND
+    restart: unless-stopped
+    env_file:
+      - ./BACKEND/.env
+    environment:
+      REDIS_URL: redis://redis:6379
+      DATABASE_PATH: /app/data/app.db
+    ports:
+      - "3000:3000"
+    volumes:
+      - backend-data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./FRONTEND
+      args:
+        VITE_API_BASE_URL: http://localhost:3000
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  backend-data:
+  redis-data:

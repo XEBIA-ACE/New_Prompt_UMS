@@ -1,0 +1,9 @@
+node_modules
+dist
+data
+.env
+sendgrid.env
+*.log
+test-output.txt
+unit-test-output.txt
+tests

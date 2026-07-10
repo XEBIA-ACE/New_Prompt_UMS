@@ -1,0 +1,49 @@
+# Single ALB for UMS (decision 2026-07-10: own ALB, deliberately NOT joining
+# the cluster's shared argus ALB group — no group.name annotation).
+#
+# Path routing (ALB evaluates most-specific first, but keep this order anyway):
+#   /api/*   → backend  (REST API lives at /api/v1/*)
+#   /health  → backend  (real backend health for external checks / CD pipeline;
+#                        without this rule /health would fall through to the SPA
+#                        catch-all and return index.html with a misleading 200)
+#   /*       → frontend (SPA + nginx)
+#
+# No TLS/custom domain yet (out of scope 2026-07-10) — plain HTTP on the
+# ALB-generated hostname. HTTPS can be layered on later via
+# alb.ingress.kubernetes.io/certificate-arn + listen-ports.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ums
+  labels:
+    app.kubernetes.io/part-of: ums
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: ums-backend
+                port:
+                  name: http
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: ums-backend
+                port:
+                  name: http
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ums-frontend
+                port:
+                  name: http

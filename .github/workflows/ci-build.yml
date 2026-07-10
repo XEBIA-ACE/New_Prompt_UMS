@@ -1,13 +1,23 @@
+# CI Build — caller workflow.
+#
+# CHANGES (EKS deployment enablement, 2026-07-10 — see DOCS/DEPLOYMENT.md):
+#   - `registries: '[]'` (images were built and discarded) replaced with
+#     `ecr_registry` pointing at the account ECR. Images now push to ECR on
+#     every push to main/master.
+#   - services JSON is now strict JSON (double quotes — required by fromJSON/jq)
+#     and each service carries its ECR repository name in `image`.
 name: CI Build
 'on':
   pull_request:
     branches:
     - main
     - master
+    - develop
   push:
     branches:
     - main
     - master
+    - develop
 permissions:
   contents: read
   pull-requests: read
@@ -17,7 +27,7 @@ jobs:
   ci-build:
     uses: ./.github/workflows/ci-build-reusable.yml
     with:
-      services: '[{''name'': ''BACKEND'', ''build_context'': ''BACKEND'', ''dockerfile'': ''Dockerfile''}, {''name'': ''FRONTEND'',
-        ''build_context'': ''FRONTEND'', ''dockerfile'': ''Dockerfile''}]'
-      registries: '[]'
+      services: '[{"name": "BACKEND", "build_context": "BACKEND", "dockerfile": "Dockerfile", "image": "ums-backend"}, {"name": "FRONTEND", "build_context": "FRONTEND", "dockerfile": "Dockerfile", "image": "ums-frontend"}]'
+      ecr_registry: 864899865567.dkr.ecr.us-east-1.amazonaws.com
+      aws_region: us-east-1
     secrets: inherit

@@ -1,0 +1,6 @@
+- [ ] Update BACKEND/src/routes/user-profile.routes.ts: add route to handle user profile creation
+- [ ] Implement BACKEND/src/services/user-profile.service.ts: handle data validation and profile persistence
+- [ ] Create BACKEND/src/services/user-profile.service.test.ts: write unit tests for UserProfileService
+- [ ] Modify BACKEND/src/adapters/sendgrid-email.adapter.ts: ensure confirmation emails are sent upon successful profile creation
+- [ ] Update DOCS/API_REFERENCE.md with new endpoint documentation
+- [ ] Review completed implementation with Product Owner for final acceptance

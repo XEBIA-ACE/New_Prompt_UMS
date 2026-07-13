@@ -2,18 +2,16 @@ name: CD Deploy (Reusable)
 'on':
   workflow_call:
     inputs:
-      image_tag:
-        description: Container image tag (SHA) to deploy
-        required: true
-        type: string
-      service_name:
-        description: Service name to deploy
+      image_sha:
+        description: Full commit SHA whose CI-built images should be deployed
         required: true
         type: string
       health_check_url:
-        description: Health check endpoint URL
-        required: true
+        description: External health check URL. Empty = derive from Ingress/LoadBalancer
+          endpoint.
+        required: false
         type: string
+        default: ''
       health_check_timeout:
         description: Health check timeout in seconds
         required: false

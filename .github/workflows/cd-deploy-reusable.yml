@@ -19,6 +19,23 @@ name: CD Deploy (Reusable)
         required: false
         type: number
         default: 300
+      aws_role_arn:
+        description: AWS IAM Role ARN for OIDC
+        required: true
+        type: string
+      aws_region:
+        description: AWS region
+        required: false
+        type: string
+        default: us-east-1
+      ecs_cluster:
+        description: ECS cluster name
+        required: true
+        type: string
+      ecs_service:
+        description: ECS service name
+        required: true
+        type: string
 permissions:
   id-token: write
   contents: read
@@ -29,6 +46,11 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v4
+    - name: Configure AWS credentials (OIDC)
+      uses: aws-actions/configure-aws-credentials@v4
+      with: &id001
+        role-to-assume: ${{ inputs.aws_role_arn }}
+        aws-region: ${{ inputs.aws_region }}
     - name: Deploy (dev) - NO TARGET CONFIGURED
       run: 'echo ''::error::No deployment target detected for this repository. CD
         cannot deploy. Configure a deployment target (ECS/ACA/GKE/Kubernetes) via
@@ -43,6 +65,9 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v4
+    - name: Configure AWS credentials (OIDC)
+      uses: aws-actions/configure-aws-credentials@v4
+      with: *id001
     - name: Deploy (staging) - NO TARGET CONFIGURED
       run: 'echo ''::error::No deployment target detected for this repository. CD
         cannot deploy. Configure a deployment target (ECS/ACA/GKE/Kubernetes) via
@@ -57,6 +82,9 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v4
+    - name: Configure AWS credentials (OIDC)
+      uses: aws-actions/configure-aws-credentials@v4
+      with: *id001
     - name: Deploy (prod) - NO TARGET CONFIGURED
       run: 'echo ''::error::No deployment target detected for this repository. CD
         cannot deploy. Configure a deployment target (ECS/ACA/GKE/Kubernetes) via

@@ -20,4 +20,8 @@ jobs:
       image_tag: ${{ github.event.workflow_run.head_sha || github.sha }}
       service_name: ${{ github.event.repository.name }}
       health_check_url: ${{ vars.HEALTH_CHECK_URL }}
+      aws_role_arn: ${{ secrets.AWS_ROLE_ARN }}
+      aws_region: ${{ vars.AWS_REGION }}
+      ecs_cluster: ${{ vars.ECS_CLUSTER }}
+      ecs_service: ${{ vars.ECS_SERVICE }}
     secrets: inherit

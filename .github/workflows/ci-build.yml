@@ -19,5 +19,5 @@ jobs:
     with:
       services: '[{''name'': ''BACKEND'', ''build_context'': ''BACKEND'', ''dockerfile'': ''Dockerfile''}, {''name'': ''FRONTEND'',
         ''build_context'': ''FRONTEND'', ''dockerfile'': ''Dockerfile''}]'
-      registries: '[]'
+      registries: '[''*.dkr.ecr.*.amazonaws.com'']'
     secrets: inherit

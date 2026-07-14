@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pipeline Changes — BEFORE vs AFTER</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .header h1 {
+            color: #667eea;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.05em;
+            line-height: 1.6;
+        }
+
+        .section {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .section h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .section h3 {
+            color: #764ba2;
+            margin-top: 25px;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.85em;
+            margin-right: 10px;
+            margin-bottom: 15px;
+        }
+
+        .status-updated {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .status-rewrite {
+            background: #fed7aa;
+            color: #92400e;
+        }
+
+        .status-complete {
+            background: #d1d5db;
+            color: #1f2937;
+        }
+
+        .status-added {
+            background: #dcfce7;
+            color: #15803d;
+        }
+
+        .code-block {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 0.85em;
+            line-height: 1.5;
+            margin: 15px 0;
+            border-left: 4px solid #667eea;
+        }
+
+        .before {
+            border-left-color: #ef4444;
+        }
+
+        .after {
+            border-left-color: #10b981;
+        }
+
+        .added {
+            border-left-color: #f59e0b;
+        }
+
+        .changed {
+            border-left-color: #3b82f6;
+        }
+
+        .code-label {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75em;
+            font-weight: 700;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .label-before {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .label-after {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .label-added {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .label-changed {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .comparison-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+
+        table th {
+            background: #f0f4ff;
+            color: #667eea;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid #667eea;
+        }
+
+        table td {
+            padding: 12px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .alert {
+            background: #dcfce7;
+            border-left: 4px solid #10b981;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            color: #065f46;
+        }
+
+        .alert.problem {
+            background: #fee2e2;
+            border-left-color: #ef4444;
+            color: #7f1d1d;
+        }
+
+        .pipeline-file {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .pipeline-file h3 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.4em;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .file-content {
+            display: block;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            padding: 12px 20px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-weight: 600;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .tab-btn:hover,
+        .tab-btn.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .summary-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .summary-card h4 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 0.95em;
+        }
+
+        .summary-card p {
+            color: #666;
+            font-size: 0.9em;
+            line-height: 1.5;
+        }
+
+        .footer {
+            text-align: center;
+            color: white;
+            margin-top: 40px;
+            padding: 20px;
+            font-size: 0.9em;
+        }
+
+        .highlight {
+            background: #fffacd;
+            padding: 2px 4px;
+            border-radius: 2px;
+            color: #333;
+        }
+
+        @media (max-width: 768px) {
+            .comparison {
+                grid-template-columns: 1fr;
+            }
+
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .file-nav {
+                flex-direction: column;
+            }
+
+            .file-btn {
+                width: 100%;
+            }
+        }
+
+        .keyword-new {
+            color: #10b981;
+            font-weight: 600;
+        }
+
+        .keyword-removed {
+            color: #ef4444;
+            font-weight: 600;
+            text-decoration: line-through;
+        }
+
+        .keyword-changed {
+            color: #3b82f6;
+            font-weight: 600;
+        }
+
+        .inline-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.75em;
+            font-weight: 700;
+            margin-left: 5px;
+        }
+
+        .inline-new {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .inline-removed {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .inline-changed {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>📋 Pipeline Changes — BEFORE vs AFTER</h1>
+            <p>Complete breakdown of all changes made to GitHub Actions workflows for EKS deployment enablement.</p>
+            <p style="margin-top: 15px; font-size: 0.95em; color: #888;">
+                <strong>Legend:</strong>
+                <span class="inline-badge inline-new">🆕 ADDED</span>
+                <span class="inline-badge inline-changed">✏️ CHANGED</span>
+                <span class="inline-badge inline-removed">❌ REMOVED</span>
+            </p>
+        </div>
+
+        <!-- Summary Overview -->
+        <div class="section">
+            <h2>📊 Summary Overview</h2>
+            <table>
+                <tr>
+                    <th>Pipeline File</th>
+                    <th>Status</th>
+                    <th>Impact</th>
+                </tr>
+                <tr>
+                    <td><code>ci-build.yml</code></td>
+                    <td><span class="status-badge status-updated">✏️ UPDATED</span></td>
+                    <td>Added ECR registry + AWS region inputs; enabled image push</td>
+                </tr>
+                <tr>
+                    <td><code>ci-build-reusable.yml</code></td>
+                    <td><span class="status-badge status-rewrite">🔄 MAJOR REWRITE</span></td>
+                    <td>Service matrix (both images), OIDC auth, Trivy scan both, push both to ECR</td>
+                </tr>
+                <tr>
+                    <td><code>cd-deploy.yml</code></td>
+                    <td><span class="status-badge status-updated">✏️ UPDATED</span></td>
+                    <td>Added EKS coordinates (cluster, namespace, region, registry)</td>
+                </tr>
+                <tr>
+                    <td><code>cd-deploy-reusable.yml</code></td>
+                    <td><span class="status-badge status-complete">🆕 COMPLETE REWRITE</span></td>
+                    <td>12-step full deployment (was 3 stubs). OIDC, verify, kubectl, secrets, kustomize, rollout, ALB, health</td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- Comprehensive View -->
+        <div class="section">
+            <h2>🔍 Detailed Changes by File</h2>
+            <p style="color: #666; margin-bottom: 20px;">Complete breakdown showing BEFORE → AFTER → Changes Summary for each pipeline file.</p>
+
+            <!-- All Files Linear View -->
+            <div id="ci-build" class="file-content active" style="display: block !important;">
+                <h3>1️⃣ ci-build.yml <span class="status-badge status-updated">✏️ UPDATED</span></h3>
+
+                <div class="alert">
+                    <strong>Purpose:</strong> Caller workflow that invokes the reusable CI Build workflow.
+                </div>
+
+                <h4 style="margin-top: 20px; margin-bottom: 10px;">BEFORE (Original)</h4>
+                <div class="code-block before">
+<span class="label-before">❌ BEFORE</span>
+services: '[{"name": "backend", "build_context": "BACKEND", "dockerfile": "Dockerfile"}]'
+registries: '[]'  # ❌ Images built but discarded
+</div>
+
+                <h4 style="margin-top: 20px; margin-bottom: 10px;">AFTER (Updated)</h4>
+                <div class="code-block after">
+<span class="label-after">✅ AFTER</span>
+services: '[{"name": "backend", ...., "image": "ums-backend"}, {"name": "frontend", ..., "image": "ums-frontend"}]'
+ecr_registry: 864899865567.dkr.ecr.us-east-1.amazonaws.com  # 🆕 ADDED
+aws_region: us-east-1  # 🆕 ADDED
+</div>
+
+                <h4 style="margin-top: 20px; margin-bottom: 10px;">Changes Summary</h4>
+                <div class="summary-grid">
+                    <div class="summary-card">
+                        <h4>❌ Removed</h4>
+                        <p><code>registries: '[]'</code> — Non-functional parameter</p>
+                    </div>
+                    <div class="summary-card">
+                        <h4>✏️ Changed</h4>
+                        <p><code>services</code> JSON — Added <code>image</code> field with ECR repo names</p>
+                    </div>
+                    <div class="summary-card">
+                        <h4>🆕 Added</h4>
+                        <p><code>ecr_registry</code> and <code>aws_region</code> inputs for ECR push</p>
+                    </div>
+                    <div class="summary-card">
+                        <h4>🆕 Added</h4>
+                        <p>Frontend service to build both backend and frontend</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ci-build-reusable.yml -->
+            <div id="ci-build-reusable" class="file-content">
+                <h3>2️⃣ ci-build-reusable.yml <span class="status-badge status-rewrite">🔄 MAJOR REWRITE</span></h3>
+
+                <div class="alert">
+                    <strong>Purpose:</strong> Reusable workflow that handles detect-changes, lint, test, build, scan, and push.
+                </div>
+
+                <h4 style="margin-top: 20px; margin-bottom: 10px;">Key Changes</h4>
+
+                <h5 style="color: #667eea; margin-top: 15px;">1. Input Parameters</h5>
+                <div class="comparison">
+                    <div class="comparison-item">
+                        <div class="code-block before">
+<span class="label-before">BEFORE</span>
+inputs:
+  services:
+    type: string
+  registries:  # ❌ REMOVED
+    type: string
+    default: '[]'
+                        </div>
+                    </div>
+                    <div class="comparison-item">
+                        <div class="code-block after">
+<span class="label-after">AFTER</span>
+inputs:
+  services:
+    type: string
+  ecr_registry:  # 🆕 ADDED
+    type: string
+    default: ''
+  aws_region:  # 🆕 ADDED
+    type: string
+    default: us-east-1
+  build_args:  # 🆕 ADDED
+    type: string
+    default: ''
+                        </div>
+                    </div>
+                </div>
+
+                <h5 style="color: #667eea; margin-top: 15px;">2. Permissions</h5>
+                <div class="code-block changed">
+<span class="label-changed">✏️ CHANGED</span>
+permissions:
+  contents: read
+  pull-requests: read
+  packages: write
+  id-token: write  # 🆕 ADDED: Required for OIDC
+  security-events: write  # 🆕 ADDED: For Trivy SARIF
+                </div>
+
+                <h5 style="color: #667eea; margin-top: 15px;">3. detect-changes Job</h5>
+                <div class="code-block changed">
+<span class="label-changed">✏️ CHANGED LOGIC</span>
+if [ "${{ github.event_name }}" = "push" ]; then
+  # Push to main: ALL services (both backend + frontend)
+  echo "matrix=$(echo "$SERVICES" | jq -c .)"
+else
+  # PR: only changed services
+  echo "matrix=$(echo "$SERVICES" | jq -c --argjson changed "$CHANGED" '[.[] | select(...)]')"
+fi
+                </div>
+
+                <h5 style="color: #667eea; margin-top: 15px;">4. scan Job</h5>
+                <div class="comparison">
+                    <div class="comparison-item">
+                        <div class="code-block before">
+<span class="label-before">BEFORE</span>
+scan:
+  strategy:
+    matrix:
+      service: [backend]  # ❌ Only backend
+  steps:
+    - trivy-action@v0.28.0
+      with:
+        exit-code: '1'  # ❌ Blocks on unfixable CVEs
+        # No category
+                        </div>
+                    </div>
+                    <div class="comparison-item">
+                        <div class="code-block after">
+<span class="label-after">AFTER</span>
+scan:
+  strategy:
+    matrix:
+      service: ${{ matrix }}  # 🆕 Dynamic (both)
+  steps:
+    - trivy-action@v0.36.0  # ✏️ Updated version
+      with:
+        ignore-unfixed: true  # 🆕 Don't block unfixable
+        exit-code: '0'  # 🆕 Changed: Warning only
+        category: trivy-${{ service.name }}  # 🆕 Per-service
+                        </div>
+                    </div>
+                </div>
+
+                <h5 style="color: #667eea; margin-top: 15px;">5. build Job</h5>
+                <div class="code-block changed">
+<span class="label-changed">✏️ CHANGED</span>
+strategy:
+  matrix:
+    service: ${{ fromJson(matrix) }}  # 🆕 Now builds both backend + frontend
+cache-from: type=gha,scope=${{ service.name }}  # 🆕 Per-service cache
+cache-to: type=gha,mode=max,scope=${{ service.name }}  # 🆕 Per-service scope
+                </div>
+
+                <h5 style="color: #667eea; margin-top: 15px;">6. push Job</h5>
+                <div class="code-block added">
+<span class="label-added">🆕 ENTIRELY NEW JOB</span>
+push:
+  if: scan passed AND ecr_registry set AND push event
+  strategy:
+    matrix:
+      service: ${{ matrix }}  # 🆕 Both services
+  steps:
+    - name: Compute image tag
+      run: echo "tag=sha-$(echo $SHA | cut -c1-7)"
+
+    - name: Configure AWS credentials (OIDC)  # 🆕 NEW
+      uses: aws-actions/configure-aws-credentials@v6
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+
+    - name: Login to Amazon ECR  # 🆕 NEW
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build and push  # 🆕 NOW PUSHES
+      uses: docker/build-push-action@v5
+      with:
+        push: true
+        tags: ${{ ecr_registry }}/${{ image }}:${{ tag }}
+                </div>
+
+                <h4 style="margin-top: 20px; margin-bottom: 10px;">Summary of Changes</h4>
+                <div class="summary-grid">
+                    <div class="summary-card">
+                        <h4>✏️ Scan Job</h4>
+                        <p>Hardcoded BACKEND → Dynamic matrix (both images)</p>
+                    </div>
+                    <div class="summary-card">
+                        <h4>✏️ Trivy</h4>
+                        <p>exit-code '1' → '0'; ignore-unfixed: true</p>
+                    </div>
+                    <div class="summary-card">
+                        <h4>🆕 push Job</h4>
+                        <p>Didn't exist; now pushes both to ECR with OIDC auth</p>
+                    </div>
+                    <div class="summary-card">
+                        <h4>🆕 Image Tags</h4>
+                        <p>Deterministic sha-&lt;short&gt; computed in CI and CD</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- cd-deploy.yml -->
+            <div id="cd-deploy" class="file-content">
+                <h3>3️⃣ cd-deploy.yml <span class="status-badge status-updated">✏️ UPDATED</span></h3>
+
+                <div class="alert">
+                    <strong>Purpose:</strong> Caller workflow that invokes CD Deploy on CI success.
+                </div>
+
+                <h4 style="margin-top: 20px; margin-bottom: 10px;">BEFORE (Original)</h4>
+                <div class="code-block before">
+<span class="label-before">❌ BEFORE</span>
+jobs:
+  deploy:
+    uses: ./.github/workflows/cd-deploy-reusable.yml
+    with:
+      image_tag: ${{ github.sha }}  # ❌ 40-char SHA
+      service_name: backend  # ❌ Hardcoded single service
+    secrets: inherit
+                </div>
+
+                <h4 style="margin-top: 20px; margin-bottom: 10px;">AFTER (Updated)</h4>
+                <div class="code-block after">
+<span class="label-after">✅ AFTER</span>
+permissions:
+  id-token: write  # 🆕 ADDED
+  contents: read
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/cd-deploy-reusable.yml
+    with:
+      image_sha: ${{ github.event.workflow_run.head_sha || github.sha }}  # 🆕 Changed from image_tag
+      ecr_registry: 864899865567.dkr.ecr.us-east-1.amazonaws.com  # 🆕 ADDED
+      aws_region: us-east-1  # 🆕 ADDED
+      cluster_name: aiops-prod  # 🆕 ADDED
+      namespace: ums  # 🆕 ADDED
+      health_check_url: ${{ vars.HEALTH_CHECK_URL }}  # 🆕 ADDED (optional)
+    secrets: inherit
+                </div>
+
+                <h4 style="margin-top: 20px; margin-bottom: 10px;">Changes Summary</h4>
+                <div class="summary-grid">
+                    <div class="summary-card">
+                        <h4>✏️ image_tag → image_sha</h4>
+                        <p>CD computes sha-&lt;short&gt; from image_sha like CI does</p>
+                    </div>
+                    <div class="summary-card">
+                        <h4>❌ Removed service_name</h4>
+                        <p>No longer single hardcoded service; deploy all images</p>
+                    </div>
+                    <div class="summary-card">
+                        <h4>🆕 EKS Coordinates</h4>
+                        <p>Added cluster_name, namespace, region, registry</p>
+                    </div>
+                    <div class="summary-card">
+                        <h4>🆕 permissions.id-token</h4>
+                        <p>Required for OIDC authentication to AWS</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- cd-deploy-reusable.yml -->
+            <div id="cd-deploy-reusable" class="file-content">
+                <h3>4️⃣ cd-deploy-reusable.yml <span class="status-badge status-complete">🆕 COMPLETE REWRITE</span></h3>
+
+                <div class="alert problem">
+                    <strong>Before:</strong> 3 stub jobs that did nothing (<code>exit 1</code>). No deployment logic existed.
+                </div>
+
+                <h4 style="margin-top: 20px; margin-bottom: 10px;">Job Structure</h4>
+                <div class="comparison">
+                    <div class="comparison-item">
+                        <div class="code-block before">
+<span class="label-before">BEFORE</span>
+jobs:
+  deploy-prod:
+    steps:
+      - run: exit 1  # ❌ Stub 1
+      - run: exit 1  # ❌ Stub 2
+      - run: exit 1  # ❌ Stub 3
+                        </div>
+                    </div>
+                    <div class="comparison-item">
+                        <div class="code-block after">
+<span class="label-after">AFTER (12 Steps)</span>
+jobs:
+  deploy-prod:
+    steps:
+      1. OIDC auth ✓
+      2. Verify backend image ✓
+      3. Verify frontend image ✓
+      4. Install kubectl ✓
+      5. Get kubeconfig ✓
+      6. Smoke test access ✓
+      7. Create K8s Secret ✓
+      8. kustomize edit image ✓
+      9. kubectl apply ✓
+      10. Wait rollout ✓
+      11. Resolve ALB ✓
+      12. Health check ✓
+                        </div>
+                    </div>
+                </div>
+
+                <h4 style="margin-top: 20px; margin-bottom: 10px;">Key Steps Added</h4>
+
+                <h5 style="color: #667eea; margin-top: 15px;">Step 1-3: OIDC Auth + Image Verification</h5>
+                <div class="code-block added">
+<span class="label-added">🆕 NEW</span>
+- name: Configure AWS credentials (OIDC)
+  uses: aws-actions/configure-aws-credentials@v6
+  with:
+    role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+
+- name: Verify backend image exists in ECR  # 🆕 Fail-fast
+  run: aws ecr describe-images --repository-name ums-backend ...
+
+- name: Verify frontend image exists in ECR  # 🆕 Fail-fast
+  run: aws ecr describe-images --repository-name ums-frontend ...
+                </div>
+
+                <h5 style="color: #667eea; margin-top: 15px;">Step 4-6: kubectl Setup + Access Check</h5>
+                <div class="code-block added">
+<span class="label-added">🆕 NEW</span>
+- name: Set up kubectl (v1.32)
+  run: curl -LO ... kubectl
+
+- name: Update kubeconfig
+  run: aws eks update-kubeconfig ...
+
+- name: Verify namespace access  # 🆕 Smoke test
+  run: kubectl auth can-i get pods --namespace ums
+                </div>
+
+                <h5 style="color: #667eea; margin-top: 15px;">Step 7: Create K8s Secret</h5>
+                <div class="code-block added">
+<span class="label-added">🆕 NEW</span>
+- name: Create/update app secrets
+  run: kubectl create secret generic ums-secrets \
+    --from-literal=SENDGRID_API_KEY=... \
+    --from-literal=OTP_HASH_SECRET=... \
+    --from-literal=ADMIN_BEARER_TOKEN=... \
+    --dry-run=client -o yaml | kubectl apply -f -
+                </div>
+
+                <h5 style="color: #667eea; margin-top: 15px;">Step 8-10: kustomize + Apply + Rollout</h5>
+                <div class="code-block added">
+<span class="label-added">🆕 NEW</span>
+- name: Set image tags in kustomization
+  run: kustomize edit set image \
+    ums-backend=ecr.../ums-backend:sha-... \
+    ums-frontend=ecr.../ums-frontend:sha-...
+
+- name: Apply manifests
+  run: kubectl apply -k k8s/overlays/prod
+
+- name: Wait for backend rollout (3 min timeout)
+  run: kubectl rollout status deployment/ums-backend --timeout=3m
+
+- name: Wait for frontend rollout (2 min timeout)
+  run: kubectl rollout status deployment/ums-frontend --timeout=2m
+                </div>
+
+                <h5 style="color: #667eea; margin-top: 15px;">Step 11-12: ALB Resolution + Health Check</h5>
+                <div class="code-block added">
+<span class="label-added">🆕 NEW</span>
+- name: Resolve ALB endpoint  # 🆕 Poll up to 5 min
+  run: for i in {1..30}; do
+    ALB_HOST=$(kubectl get ingress ums -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+    [ -n "$ALB_HOST" ] && exit 0
+    sleep 10
+  done
+
+- name: Health check (with retry)  # 🆕 Retry 15x, 2.5 min
+  run: for i in {1..15}; do
+    curl -f http://$ALB_HOST/health && exit 0
+    sleep 10
+  done
+
+- name: Dump diagnostics on failure  # 🆕 Debug info
+  if: failure()
+  run: kubectl cluster-info; kubectl get pods ...
+                </div>
+
+                <h4 style="margin-top: 20px; margin-bottom: 10px;">Summary of Complete Rewrite</h4>
+                <div class="summary-grid">
+                    <div class="summary-card">
+                        <h4>From 3 Stubs</h4>
+                        <p>To 12 functional steps</p>
+                    </div>
+                    <div class="summary-card">
+                        <h4>Image Verification</h4>
+                        <p>Fail-fast if images missing in ECR</p>
+                    </div>
+                    <div class="summary-card">
+                        <h4>K8s Secret Creation</h4>
+                        <p>Idempotent: --dry-run=client | apply</p>
+                    </div>
+                    <div class="summary-card">
+                        <h4>Rollout Gates</h4>
+                        <p>3-5 min timeouts; ALB resolution; health checks</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Problems Fixed -->
+        <div class="section">
+            <h2>🔧 Problems Fixed</h2>
+            <table>
+                <tr>
+                    <th>Problem</th>
+                    <th>Before</th>
+                    <th>After</th>
+                </tr>
+                <tr>
+                    <td><strong>Images discarded</strong></td>
+                    <td>Built but never pushed anywhere</td>
+                    <td>Pushed to ECR with sha-&lt;short&gt; tags</td>
+                </tr>
+                <tr>
+                    <td><strong>Frontend blindspot</strong></td>
+                    <td>Only backend scanned; frontend ignored</td>
+                    <td>Both images scanned by Trivy</td>
+                </tr>
+                <tr>
+                    <td><strong>No deployment logic</strong></td>
+                    <td>3 stub jobs (exit 1)</td>
+                    <td>12-step full deployment pipeline</td>
+                </tr>
+                <tr>
+                    <td><strong>Image tag mismatch</strong></td>
+                    <td>N/A (no push)</td>
+                    <td>Deterministic sha-&lt;short&gt; in both CI and CD</td>
+                </tr>
+                <tr>
+                    <td><strong>AWS authentication</strong></td>
+                    <td>Not possible in CI/CD</td>
+                    <td>OIDC (no static AWS keys)</td>
+                </tr>
+                <tr>
+                    <td><strong>CVE false positives</strong></td>
+                    <td>Unfixable CVEs block all deploys</td>
+                    <td>ignore-unfixed: true; exit-code: 0</td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>Pipeline Changes Documentation • Generated: 2026-07-10</p>
+            <p>For Markdown version, see: <strong>PIPELINE-CHANGES-DETAILED.md</strong></p>
+        </div>
+    </div>
+
+    <script>
+        function switchFile(fileName) {
+            // Hide all file contents
+            const contents = document.querySelectorAll('.file-content');
+            contents.forEach(c => c.classList.remove('active'));
+
+            // Remove active class from all buttons
+            const btns = document.querySelectorAll('.file-btn');
+            btns.forEach(b => b.classList.remove('active'));
+
+            // Show selected content
+            document.getElementById(fileName).classList.add('active');
+
+            // Add active class to clicked button
+            event.target.classList.add('active');
+
+            // Scroll to content
+            document.querySelector('.file-content.active').scrollIntoView({ behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>

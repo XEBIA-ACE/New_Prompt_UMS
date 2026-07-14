@@ -6,3 +6,7 @@ sendgrid.env
 .kiro/
 .vscode/
 .planning/
+DOCS/DEPLOYMENT-EXECUTION-COMPLETE.md
+DOCS/QUICK-REFERENCE.md
+DOCS/deployment-dashboard.html
+ums-secrets.yaml

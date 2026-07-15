@@ -58,9 +58,18 @@ jobs:
       env:
         SERVICES: ${{ inputs.services }}
         CHANGED: ${{ steps.changes.outputs.changes || '[]' }}
-      run: "if [ \"${{ github.event_name }}\" = \"push\" ]; then\n  echo \"matrix=$(echo \"$SERVICES\" | jq -c .)\" >> \"\
-        $GITHUB_OUTPUT\"\nelse\n  echo \"matrix=$(echo \"$SERVICES\" | jq -c --argjson changed \\\"$CHANGED\\\" '[.[] | select(.name\
-        \ as \\$n | \\$changed | index(\\$n))]')\" >> \"$GITHUB_OUTPUT\"\nfi"
+      run: |
+        if [ "${{ github.event_name }}" = "push" ]; then
+          echo "matrix=$(echo "$SERVICES" | jq -c .)" >> "$GITHUB_OUTPUT"
+        else
+          FILTERED=$(echo "$SERVICES" | jq -c --argjson changed "$CHANGED" '[.[] | select(.name as $n | $changed | index($n))]')
+          # If no services changed, return all services for PR to main/develop branches
+          if [ "$FILTERED" = "[]" ] && [[ "${{ github.base_ref }}" =~ ^(main|master|develop)$ ]]; then
+            echo "matrix=$(echo "$SERVICES" | jq -c .)" >> "$GITHUB_OUTPUT"
+          else
+            echo "matrix=$FILTERED" >> "$GITHUB_OUTPUT"
+          fi
+        fi
   lint:
     runs-on: ubuntu-latest
     needs:

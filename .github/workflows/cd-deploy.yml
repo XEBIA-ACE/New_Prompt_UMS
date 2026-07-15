@@ -8,7 +8,13 @@ name: CD Deploy
     branches:
     - main
     - develop
-  workflow_dispatch: {}
+    - 'pipeline-gen/**'
+  workflow_dispatch:
+    inputs:
+      image_sha:
+        description: 'Commit SHA to deploy'
+        required: false
+        type: string
 permissions:
   id-token: write
   contents: read
@@ -18,7 +24,7 @@ jobs:
       == 'workflow_dispatch' }}
     uses: ./.github/workflows/cd-deploy-reusable.yml
     with:
-      image_sha: ${{ github.event.workflow_run.head_sha || github.sha }}
+      image_sha: ${{ github.event.workflow_run.head_sha || inputs.image_sha || github.sha }}
       health_check_url: ${{ vars.HEALTH_CHECK_URL }}
       ecr_registry: ${{ vars.ECR_REGISTRY }}
       aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}

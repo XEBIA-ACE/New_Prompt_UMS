@@ -25,3 +25,17 @@ jobs:
       ecr_registry: ${{ vars.ECR_REGISTRY }}
       aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
     secrets: inherit
+
+  trigger-cd-deploy:
+    runs-on: ubuntu-latest
+    needs: ci-build
+    if: ${{ (github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')) || (github.event_name == 'pull_request' && contains(github.head_ref, 'pipeline-gen')) }}
+    steps:
+      - name: Trigger CD Deploy workflow
+        run: |
+          gh workflow run cd-deploy.yml \
+            --repo ${{ github.repository }} \
+            --ref ${{ github.event_name == 'pull_request' && github.head_ref || github.ref }} \
+            -f image_sha=${{ github.sha }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

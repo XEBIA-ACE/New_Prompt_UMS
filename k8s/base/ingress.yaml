@@ -8,9 +8,8 @@
 #                        catch-all and return index.html with a misleading 200)
 #   /*       → frontend (SPA + nginx)
 #
-# No TLS/custom domain yet (out of scope 2026-07-10) — plain HTTP on the
-# ALB-generated hostname. HTTPS can be layered on later via
-# alb.ingress.kubernetes.io/certificate-arn + listen-ports.
+# HTTPS enabled with *.agentic-ace.io certificate (2026-07-15).
+# Listeners: HTTP:80 (redirect to HTTPS) + HTTPS:443 (primary)
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -20,7 +19,10 @@ metadata:
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:864899865567:certificate/1ce11b6b-55e0-49e0-aaa8-6eda59dc9b8e
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS-1-2-2017-01
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
 spec:
   ingressClassName: alb
   rules:

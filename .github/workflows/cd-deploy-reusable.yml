@@ -1,3 +1,29 @@
+# CD Deploy (Reusable) — deploys UMS to EKS via Kustomize.
+#
+# CHANGES (EKS deployment enablement, 2026-07-10 — see DOCS/DEPLOYMENT.md):
+#   The previous version had three placeholder jobs (deploy-dev/staging/prod)
+#   that unconditionally `exit 1` ("No deployment target detected"). They are
+#   replaced by a single deploy-prod job targeting cluster aiops-prod,
+#   namespace ums (single-prod-target decision, 2026-07-10).
+#
+# DESIGN NOTES:
+#   - Auth: GitHub OIDC → IAM role github-actions-ums-deploy (secrets.AWS_ROLE_ARN).
+#     The role's EKS access entry is AmazonEKSEditPolicy scoped to namespace
+#     `ums` ONLY. Consequences: this job cannot create/read cluster-scoped
+#     resources — the Namespace `ums`, StorageClass `ums-gp3`, and any
+#     kube-system checks are pre-provisioned/verified by infra (see
+#     .planning/INFRA-PLAN.md and DOCS/DEPLOYMENT.md), and k8s/base/ contains
+#     no Namespace resource.
+#   - Image tags: sha-<first 7 of commit SHA> — the same contract the CI push
+#     job uses. The ECR existence check below fails fast (clear error, no
+#     ImagePullBackOff) if CI never pushed this commit's images (e.g. a
+#     workflow_dispatch on an unbuilt SHA).
+#   - `kustomize edit set image` (declarative, updates kustomization.yaml) is
+#     used instead of `kubectl set image` (imperative — the next apply would
+#     silently revert the image).
+#   - kubectl is pinned to v1.32.x to match the cluster's Kubernetes version.
+#   - Rollout gates use explicit --timeout (default kubectl timeout is
+#     infinite, which silently hangs runners on stuck pods).
 name: CD Deploy (Reusable)
 'on':
   workflow_call:
@@ -6,17 +32,6 @@ name: CD Deploy (Reusable)
         description: Full commit SHA whose CI-built images should be deployed
         required: true
         type: string
-      health_check_url:
-        description: External health check URL. Empty = derive from Ingress/LoadBalancer
-          endpoint.
-        required: false
-        type: string
-        default: ''
-      health_check_timeout:
-        description: Health check timeout in seconds
-        required: false
-        type: number
-        default: 300
       ecr_registry:
         description: ECR registry host holding the service images
         required: true
@@ -30,13 +45,22 @@ name: CD Deploy (Reusable)
         description: EKS cluster name
         required: false
         type: string
-        default: ''
+        default: aiops-prod
       namespace:
-        description: Kubernetes namespace (pre-created by infra; deploy role is scoped
-          to it)
+        description: Kubernetes namespace (pre-created by infra; deploy role is scoped to it)
         required: false
         type: string
-        default: default
+        default: ums
+      health_check_url:
+        description: External health check URL. Empty = derive http://<ALB hostname>/health from the Ingress.
+        required: false
+        type: string
+        default: ''
+      health_check_timeout:
+        description: Health check timeout in seconds
+        required: false
+        type: number
+        default: 300
 permissions:
   id-token: write
   contents: read
@@ -44,92 +68,147 @@ jobs:
   deploy-prod:
     runs-on: ubuntu-latest
     environment: prod
+    env:
+      NS: ${{ inputs.namespace }}
     steps:
     - name: Checkout
       uses: actions/checkout@v4
+    # Same tag contract as the CI push job: sha-<first 7 chars of commit SHA>.
     - name: Compute image tag
       id: tag
       run: echo "tag=sha-$(echo '${{ inputs.image_sha }}' | cut -c1-7)" >> "$GITHUB_OUTPUT"
     - name: Configure AWS credentials (OIDC)
       uses: aws-actions/configure-aws-credentials@v6
-      with: *id001
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        aws-region: ${{ inputs.aws_region }}
     - name: Verify images exist in ECR
       env:
         TAG: ${{ steps.tag.outputs.tag }}
-      run: "# Fail fast with a clear message instead of an ImagePullBackOff mid-rollout.\n\
-        for repo in $(echo '${{ inputs.services || '' }}' | jq -r '.[].image // empty'\
-        \ 2>/dev/null || echo ''); do\n  if [ -n \"$repo\" ]; then\n    if ! aws ecr\
-        \ describe-images --repository-name \"$repo\" --image-ids imageTag=\"$TAG\"\
-        \ --region '${{ inputs.aws_region }}' >/dev/null 2>&1; then\n      echo \"\
-        ::error::Image $repo:$TAG not found in ECR. CI has not pushed images for commit\
-        \ ${{ inputs.image_sha }} \u2014 check the CI Build run for that commit.\"\
-        \n      exit 1\n    fi\n    echo \"\u2713 $repo:$TAG present in ECR\"\n  fi\n\
-        done"
+      run: |
+        # Fail fast with a clear message instead of an ImagePullBackOff mid-rollout.
+        for repo in ums-backend ums-frontend; do
+          if ! aws ecr describe-images --repository-name "$repo" --image-ids imageTag="$TAG" --region '${{ inputs.aws_region }}' >/dev/null 2>&1; then
+            echo "::error::Image $repo:$TAG not found in ECR. CI has not pushed images for commit ${{ inputs.image_sha }} — check the CI Build run for that commit."
+            exit 1
+          fi
+          echo "✓ $repo:$TAG present in ECR"
+        done
+    # Pin kubectl to the cluster's minor version (aiops-prod is Kubernetes 1.32).
     - name: Set up kubectl
       uses: azure/setup-kubectl@v4
       with:
         version: v1.32.3
     - name: Update kubeconfig
-      run: aws eks update-kubeconfig --region '${{ inputs.aws_region }}' --name '${{
-        inputs.cluster_name }}'
+      run: aws eks update-kubeconfig --region '${{ inputs.aws_region }}' --name '${{ inputs.cluster_name }}'
     - name: Verify namespace access
-      run: "# Smoke-test the namespace-scoped access entry before mutating anything.\n\
-        NS=\"${{ inputs.namespace }}\"\nif [ \"$(kubectl auth can-i create deployment\
-        \ -n \"$NS\")\" != \"yes\" ]; then\n  echo \"::error::Deploy role cannot create\
-        \ deployments in namespace $NS. Check the EKS access entry / IAM policy association\
-        \ for the deploy role.\"\n  exit 1\nfi"
+      run: |
+        # Smoke-test the namespace-scoped access entry before mutating anything.
+        if [ "$(kubectl auth can-i create deployment -n "$NS")" != "yes" ]; then
+          echo "::error::Deploy role cannot create deployments in namespace $NS. Check the EKS access entry / AmazonEKSEditPolicy association for the github-actions-ums-deploy role."
+          exit 1
+        fi
+    - name: Create/update application Secret
+      env:
+        SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+        OTP_HASH_SECRET: ${{ secrets.OTP_HASH_SECRET }}
+        ADMIN_BEARER_TOKEN: ${{ secrets.ADMIN_BEARER_TOKEN }}
+      run: |
+        # Idempotent (dry-run | apply); values live only in GitHub Secrets — no
+        # secret material is committed to git. Missing values fail here, not as
+        # a CrashLoopBackOff (the backend config is fail-fast on missing vars).
+        for v in SENDGRID_API_KEY OTP_HASH_SECRET ADMIN_BEARER_TOKEN; do
+          if [ -z "${!v}" ]; then
+            echo "::error::GitHub secret $v is not set. Add it under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+        done
+        kubectl create secret generic ums-secrets -n "$NS" \
+          --from-literal=SENDGRID_API_KEY="$SENDGRID_API_KEY" \
+          --from-literal=OTP_HASH_SECRET="$OTP_HASH_SECRET" \
+          --from-literal=ADMIN_BEARER_TOKEN="$ADMIN_BEARER_TOKEN" \
+          --dry-run=client -o yaml | kubectl apply -f -
     - name: Set images in Kustomize overlay
       working-directory: k8s/overlays/prod
       env:
         TAG: ${{ steps.tag.outputs.tag }}
-      run: "# kustomize edit updates kustomization.yaml declaratively; kubectl set\n\
-        # image would be reverted by the next apply. Install kustomize if needed.\n\
-        if ! command -v kustomize >/dev/null 2>&1; then\n  curl -sSLo /tmp/kustomize.tar.gz\
-        \ \"https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.4.3/kustomize_v5.4.3_linux_amd64.tar.gz\"\
-        \n  tar -xzf /tmp/kustomize.tar.gz -C /tmp\n  sudo mv /tmp/kustomize /usr/local/bin/kustomize\n\
-        fi\n# Update image references \u2014 customize per your service names\nkustomize\
-        \ edit set image \\\n  \"app=${{ inputs.ecr_registry }}/app:$TAG\"\necho \"\
-        --- resolved kustomization.yaml ---\"\ncat kustomization.yaml"
+      run: |
+        # kustomize edit updates kustomization.yaml declaratively; kubectl set
+        # image would be reverted by the next apply. Install kustomize (pinned)
+        # if the runner image doesn't ship it.
+        if ! command -v kustomize >/dev/null 2>&1; then
+          curl -sSLo /tmp/kustomize.tar.gz "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.4.3/kustomize_v5.4.3_linux_amd64.tar.gz"
+          tar -xzf /tmp/kustomize.tar.gz -C /tmp
+          sudo mv /tmp/kustomize /usr/local/bin/kustomize
+        fi
+        kustomize edit set image \
+          "ums-backend=${{ inputs.ecr_registry }}/ums-backend:$TAG" \
+          "ums-frontend=${{ inputs.ecr_registry }}/ums-frontend:$TAG"
+        echo "--- resolved kustomization.yaml ---"
+        cat kustomization.yaml
     - name: Apply manifests
       run: kubectl apply -k k8s/overlays/prod
     - name: Wait for rollouts
-      run: "# Explicit timeouts \u2014 kubectl's default is infinite and would hang\
-        \ the\n# runner on a stuck rollout.\nNS=\"${{ inputs.namespace }}\"\nfor deploy\
-        \ in $(kubectl get deployments -n \"$NS\" -o jsonpath='{.items[*].metadata.name}');\
-        \ do\n  echo \"Waiting for $deploy...\"\n  kubectl rollout status deployment/$deploy\
-        \ -n \"$NS\" --timeout=5m\ndone"
-    - name: Resolve service endpoint
-      id: endpoint
-      run: "NS=\"${{ inputs.namespace }}\"\n# Try Ingress first, then LoadBalancer\
-        \ service\nfor i in $(seq 1 30); do\n  ENDPOINT=$(kubectl get ingress -n \"\
-        $NS\" -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}' 2>/dev/null\
-        \ || true)\n  if [ -z \"$ENDPOINT\" ]; then\n    ENDPOINT=$(kubectl get svc\
-        \ -n \"$NS\" -o jsonpath='{.items[?(@.spec.type==\"LoadBalancer\")].status.loadBalancer.ingress[0].hostname}'\
-        \ 2>/dev/null || true)\n  fi\n  if [ -n \"$ENDPOINT\" ]; then\n    echo \"\
-        hostname=$ENDPOINT\" >> \"$GITHUB_OUTPUT\"\n    echo \"Endpoint: $ENDPOINT\"\
-        \n    exit 0\n  fi\n  echo \"Waiting for endpoint... ($i/30)\"\n  sleep 10\n\
-        done\necho \"::warning::No external endpoint found after 5 minutes. Health\
-        \ check will use configured URL.\""
+      run: |
+        # Explicit timeouts — kubectl's default is infinite and would hang the
+        # runner on a stuck rollout. Backend uses Recreate (RWO EBS volume), so
+        # expect a short gap between old pod termination and new pod ready.
+        kubectl rollout status deployment/ums-redis    -n "$NS" --timeout=3m
+        kubectl rollout status deployment/ums-backend  -n "$NS" --timeout=5m
+        kubectl rollout status deployment/ums-frontend -n "$NS" --timeout=5m
+    - name: Resolve ALB endpoint
+      id: alb
+      run: |
+        # First-ever deploy: ALB provisioning takes ~2-3 minutes after the
+        # Ingress is created. Poll until the hostname is populated.
+        for i in $(seq 1 30); do
+          ALB=$(kubectl get ingress ums -n "$NS" -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+          if [ -n "$ALB" ]; then
+            echo "hostname=$ALB" >> "$GITHUB_OUTPUT"
+            echo "ALB: $ALB"
+            exit 0
+          fi
+          echo "Waiting for ALB hostname... ($i/30)"
+          sleep 10
+        done
+        echo "::error::Ingress ums has no ALB hostname after 5 minutes. Check the AWS Load Balancer Controller logs (requires cluster-admin: kubectl logs -n kube-system deploy/aws-load-balancer-controller)."
+        exit 1
     - name: Health check
       env:
         TIMEOUT: ${{ inputs.health_check_timeout }}
-      run: "URL='${{ inputs.health_check_url }}'\nif [ -z \"$URL\" ]; then\n  ENDPOINT=\"\
-        ${{ steps.endpoint.outputs.hostname }}\"\n  if [ -n \"$ENDPOINT\" ]; then\n\
-        \    URL=\"http://$ENDPOINT/health\"\n  else\n    echo \"::warning::No health\
-        \ check URL configured and no endpoint resolved. Skipping.\"\n    exit 0\n\
-        \  fi\nfi\necho \"Probing $URL (timeout ${TIMEOUT}s)\"\ndeadline=$((SECONDS\
-        \ + TIMEOUT))\nwhile [ $SECONDS -lt $deadline ]; do\n  if curl -sfm 10 \"\
-        $URL\"; then\n    echo \"\"\n    echo \"\u2713 Health check passed\"\n   \
-        \ exit 0\n  fi\n  echo \"Not healthy yet, retrying in 10s...\"\n  sleep 10\n\
-        done\necho \"::error::Health check did not pass within ${TIMEOUT}s: $URL\"\
-        \nexit 1"
+      run: |
+        URL='${{ inputs.health_check_url }}'
+        if [ -z "$URL" ]; then
+          URL="http://${{ steps.alb.outputs.hostname }}/health"
+        fi
+        echo "Probing $URL (timeout ${TIMEOUT}s)"
+        # /health is routed to the backend by the Ingress (pathType Exact) and
+        # returns 200 {"status":"ok",...}. Retry: new ALB target groups take a
+        # little while to pass their own health checks after rollout.
+        deadline=$((SECONDS + TIMEOUT))
+        while [ $SECONDS -lt $deadline ]; do
+          if curl -sfm 10 "$URL"; then
+            echo ""
+            echo "✓ Health check passed"
+            exit 0
+          fi
+          echo "Not healthy yet, retrying in 10s..."
+          sleep 10
+        done
+        echo "::error::Health check did not pass within ${TIMEOUT}s: $URL"
+        exit 1
     - name: Diagnostics on failure
       if: failure()
-      run: "NS=\"${{ inputs.namespace }}\"\necho \"=== Pods ===\"\nkubectl get pods\
-        \ -n \"$NS\" -o wide || true\necho \"=== Events (most recent) ===\"\nkubectl\
-        \ get events -n \"$NS\" --sort-by=.lastTimestamp | tail -40 || true\necho\
-        \ \"=== Deployments ===\"\nkubectl describe deployment -n \"$NS\" || true\n\
-        echo \"=== Recent logs ===\"\nfor deploy in $(kubectl get deployments -n \"\
-        $NS\" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do\n  echo \"\
-        --- $deploy ---\"\n  kubectl logs -n \"$NS\" \"deployment/$deploy\" --tail=50\
-        \ --all-containers || true\ndone"
+      run: |
+        echo "=== Pods ==="
+        kubectl get pods -n "$NS" -o wide || true
+        echo "=== Events (most recent) ==="
+        kubectl get events -n "$NS" --sort-by=.lastTimestamp | tail -40 || true
+        echo "=== Deployments ==="
+        kubectl describe deployment -n "$NS" || true
+        echo "=== Ingress ==="
+        kubectl describe ingress ums -n "$NS" || true
+        echo "=== Backend logs ==="
+        kubectl logs -n "$NS" deployment/ums-backend --tail=100 --all-containers || true
+        echo "=== Frontend logs ==="
+        kubectl logs -n "$NS" deployment/ums-frontend --tail=50 --all-containers || true

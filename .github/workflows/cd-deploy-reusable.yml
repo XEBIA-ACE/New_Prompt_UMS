@@ -212,3 +212,4 @@ jobs:
         kubectl logs -n "$NS" deployment/ums-backend --tail=100 --all-containers || true
         echo "=== Frontend logs ==="
         kubectl logs -n "$NS" deployment/ums-frontend --tail=50 --all-containers || true
+Test pipeline trigger - $(date)

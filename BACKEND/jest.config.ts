@@ -42,7 +42,6 @@ const config: Config = {
       testEnvironment: 'node',
       roots: ['<rootDir>/src'],
       testMatch: ['**/integration/**/*.test.ts', '**/integration/**/*.spec.ts'],
-      testTimeout: 30000,
     },
   ],
 };

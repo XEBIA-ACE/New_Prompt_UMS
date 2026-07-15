@@ -117,3 +117,4 @@ _The table below predates the PostgreSQL → SQLite migration and is kept as a h
 | 4 | WSL Postgres role `postgres` had no password set for TCP/password auth (only OS-level peer auth worked), so the app's `PGPASSWORD=postgres` was rejected | `ALTER USER postgres WITH PASSWORD 'postgres';` inside WSL; also set `listen_addresses = '*'` and added a `pg_hba.conf` rule for the WSL/Windows bridge subnet so the VM IP is reachable from Windows | WSL Postgres config only (no repo files changed) | Same as above |
 # Pipeline test - Wed Jul 15 16:02:36 IST 2026
 # Workflow fix test - Wed Jul 15 16:16:20 IST 2026
+# Test SHA passing - Wed Jul 15 16:21:56 IST 2026

@@ -35,6 +35,6 @@ jobs:
         run: |
           gh workflow run cd-deploy.yml \
             --repo ${{ github.repository }} \
-            --ref ${{ github.ref }}
+            --ref ${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

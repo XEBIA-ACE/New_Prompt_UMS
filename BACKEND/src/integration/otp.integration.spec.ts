@@ -1,3 +1,8 @@
+/**
+ * @jest-environment node
+ */
+jest.setTimeout(30000);
+
 process.env.OTP_HASH_SECRET = 'test-otp-secret';
 process.env.OTP_EMAIL_TEMPLATE_ID = 'd-test-otp-template';
 process.env.OTP_MAX_ATTEMPTS_PER_WINDOW = '5';

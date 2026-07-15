@@ -126,7 +126,7 @@ jobs:
         cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}
     strategy:
       matrix:
-        service: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
+        service: ${{ fromJson(needs.detect-changes.outputs.matrix || '[]') }}
       fail-fast: false
   scan:
     runs-on: ubuntu-latest
@@ -165,7 +165,7 @@ jobs:
         category: trivy-${{ matrix.service.name }}
     strategy:
       matrix:
-        service: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
+        service: ${{ fromJson(needs.detect-changes.outputs.matrix || '[]') }}
       fail-fast: false
   push:
     runs-on: ubuntu-latest
@@ -199,5 +199,5 @@ jobs:
         cache-from: type=gha,scope=${{ matrix.service.name }}
     strategy:
       matrix:
-        service: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
+        service: ${{ fromJson(needs.detect-changes.outputs.matrix || '[]') }}
       fail-fast: false

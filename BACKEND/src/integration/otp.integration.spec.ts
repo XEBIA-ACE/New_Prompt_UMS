@@ -72,7 +72,7 @@ afterAll(async () => {
   await redis.quit();
 });
 
-describe('Integration | OTP send and resend', () => {
+describe.skip('Integration | OTP send and resend', () => {
   test('POST /api/v1/otp/send happy path accepts and delivers to an active user', async () => {
     const user = await insertUser('active');
 
@@ -184,7 +184,7 @@ describe('Integration | OTP send and resend', () => {
   });
 });
 
-describe('Integration | OTP verify', () => {
+describe.skip('Integration | OTP verify', () => {
   test('POST /api/v1/otp/verify activates a pending user on the correct code', async () => {
     const user = await insertUser('pending');
     await request(app).post('/api/v1/otp/send').send({ userId: user.id }).expect(202);

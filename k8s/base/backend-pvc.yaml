@@ -1,0 +1,18 @@
+# Persistent storage for the backend's SQLite database (/app/data/app.db).
+# StorageClass ums-gp3 (EBS gp3, reclaimPolicy Retain) is pre-provisioned by
+# infra — the cluster has NO default StorageClass, so the explicit name is
+# required or the claim stays Pending forever.
+# EBS is ReadWriteOnce → the backend runs 1 replica with strategy Recreate.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ums-backend-data
+  labels:
+    app.kubernetes.io/part-of: ums
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ums-gp3
+  resources:
+    requests:
+      storage: 5Gi

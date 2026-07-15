@@ -1,0 +1,53 @@
+# In-cluster Redis for OTP storage and rate limiting (decision 2026-07-10:
+# in-cluster over ElastiCache — cache-class workload, no AWS provisioning).
+#
+# Storage is emptyDir (ephemeral) BY DESIGN: OTPs and rate-limit counters are
+# short-lived (minutes). A Redis pod restart logs users' pending OTPs out —
+# acceptable; they simply request a new code. docker-compose keeps a volume
+# for dev convenience, but persistence here would add a PVC for data that
+# expires in minutes anyway.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ums-redis
+  labels:
+    app: ums-redis
+    app.kubernetes.io/part-of: ums
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ums-redis
+  template:
+    metadata:
+      labels:
+        app: ums-redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}

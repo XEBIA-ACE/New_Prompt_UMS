@@ -181,7 +181,7 @@ jobs:
     needs:
     - scan
     - detect-changes
-    if: ${{ needs.detect-changes.outputs.has_changes == 'true' && inputs.ecr_registry != '' && github.event_name == 'push'
+    if: ${{ needs.detect-changes.outputs.has_changes == 'true' && inputs.ecr_registry != '' && (github.event_name == 'push' || (github.event_name == 'pull_request' && contains(github.head_ref, 'pipeline-gen')))
       }}
     steps:
     - name: Checkout

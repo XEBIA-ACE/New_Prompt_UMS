@@ -29,7 +29,7 @@ jobs:
   trigger-cd-deploy:
     runs-on: ubuntu-latest
     needs: ci-build
-    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main') }}
+    if: ${{ (github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')) || (github.event_name == 'pull_request' && contains(github.head_ref, 'pipeline-gen')) }}
     steps:
       - name: Trigger CD Deploy workflow
         run: |

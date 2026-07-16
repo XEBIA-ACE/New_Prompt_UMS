@@ -1,0 +1,49 @@
+name: Deploy to Azure App Service
+description: Deploy container image to Azure App Service with slot swap and health
+  verification
+inputs:
+  image_tag:
+    description: Full container image URI (registry/repo:tag) to deploy
+    required: true
+  environment:
+    description: Target environment (dev/staging/prod)
+    required: true
+  app_name:
+    description: Azure App Service name
+    required: true
+  resource_group:
+    description: Azure resource group
+    required: true
+  slot:
+    description: Deployment slot name. Empty = deploy directly to production slot.
+    required: false
+  health_path:
+    description: Health check path to verify after deploy (e.g. /health)
+    required: false
+runs:
+  using: composite
+  steps:
+  - name: Deploy image to App Service
+    shell: bash
+    run: "SLOT_ARG=\"\"\nif [ -n \"${{ inputs.slot }}\" ]; then\n  SLOT_ARG=\"--slot\
+      \ ${{ inputs.slot }}\"\nfi\naz webapp config container set \\\n  --name ${{\
+      \ inputs.app_name }} \\\n  --resource-group ${{ inputs.resource_group }} \\\n\
+      \  --docker-custom-image-name ${{ inputs.image_tag }} \\\n  $SLOT_ARG\n# Restart\
+      \ to pick up new image\naz webapp restart \\\n  --name ${{ inputs.app_name }}\
+      \ \\\n  --resource-group ${{ inputs.resource_group }} \\\n  $SLOT_ARG"
+  - name: Wait for healthy response
+    shell: bash
+    run: "HEALTH_PATH=\"${{ inputs.health_path || '/health' }}\"\nif [ -n \"${{ inputs.slot\
+      \ }}\" ]; then\n  URL=\"https://${{ inputs.app_name }}-${{ inputs.slot }}.azurewebsites.net${HEALTH_PATH}\"\
+      \nelse\n  URL=\"https://${{ inputs.app_name }}.azurewebsites.net${HEALTH_PATH}\"\
+      \nfi\necho \"Probing $URL\"\nfor i in $(seq 1 30); do\n  if curl -sfm 10 \"\
+      $URL\" >/dev/null 2>&1; then\n    echo \"\u2713 App Service is healthy\"\n \
+      \   exit 0\n  fi\n  echo \"Waiting... ($i/30)\"\n  sleep 10\ndone\necho \"::error::App\
+      \ Service did not become healthy within 5 minutes\"\nexit 1"
+  - name: Swap slot to production
+    if: ${{ inputs.slot != '' }}
+    shell: bash
+    run: "az webapp deployment slot swap \\\n  --name ${{ inputs.app_name }} \\\n\
+      \  --resource-group ${{ inputs.resource_group }} \\\n  --slot ${{ inputs.slot\
+      \ }} \\\n  --target-slot production\necho \"\u2713 Slot ${{ inputs.slot }} swapped\
+      \ to production\""

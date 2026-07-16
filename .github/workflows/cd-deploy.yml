@@ -7,6 +7,7 @@ name: CD Deploy
     - completed
     branches:
     - main
+    - develop
   workflow_dispatch: {}
 permissions:
   id-token: write
@@ -17,7 +18,23 @@ jobs:
       == 'workflow_dispatch' }}
     uses: ./.github/workflows/cd-deploy-reusable.yml
     with:
-      image_tag: ${{ github.event.workflow_run.head_sha || github.sha }}
-      service_name: ${{ github.event.repository.name }}
+      image_sha: ${{ github.event.workflow_run.head_sha || github.sha }}
       health_check_url: ${{ vars.HEALTH_CHECK_URL }}
+      ecr_registry: ${{ vars.ECR_REGISTRY }}
+      aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      cluster_name: ${{ vars.EKS_CLUSTER_NAME }}
+      namespace: ${{ vars.K8S_NAMESPACE || 'default' }}
+      azure_client_id: ${{ secrets.AZURE_CLIENT_ID }}
+      azure_tenant_id: ${{ secrets.AZURE_TENANT_ID }}
+      azure_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      aca_name: ${{ vars.ACA_NAME }}
+      aca_resource_group: ${{ vars.ACA_RESOURCE_GROUP }}
+      gcp_wif_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+      gcp_service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+      gke_cluster: ${{ vars.GKE_CLUSTER }}
+      gke_zone: ${{ vars.GKE_ZONE }}
+      lambda_function_name: ${{ vars.LAMBDA_FUNCTION_NAME }}
+      app_service_name: ${{ vars.APP_SERVICE_NAME }}
+      app_service_resource_group: ${{ vars.APP_SERVICE_RESOURCE_GROUP }}
+      app_service_slot: ${{ vars.APP_SERVICE_SLOT }}
     secrets: inherit

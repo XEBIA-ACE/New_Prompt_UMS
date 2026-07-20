@@ -1,0 +1,231 @@
+# Deliver OTP via SMS
+
+| | |
+|---|---|
+| **ID** | US-002 |
+| **Feature** | F-02 — OTP Verification |
+| **Epic** | EP-001 — OTP Generation and Delivery |
+| **Status** | Draft |
+| **Date** | 2026-07-02 |
+
+## Background
+
+Part of feature *OTP Verification*.
+
+## Acceptance Criteria
+
+### Story
+
+- [ ] (none)
+
+### Epic
+
+- [ ] (none)
+
+## Proposed Solution
+
+### Functional Specification
+
+## S-101
+
+Key words MUST, MUST NOT, SHALL, SHALL NOT, SHOULD, SHOULD NOT, MAY, and OPTIONAL in this document are to be interpreted as described in RFC 2119.
+
+---
+
+**Functional Specification**
+**Story**: US-002 – Deliver OTP via SMS
+**Service**: User Management Service (S-101)
+**Feature**: OTP Verification
+
+---
+
+### Purpose
+
+This specification defines the behavior of the User Management Service when generating and delivering a one-time password (OTP) to a user via SMS. It exists to ensure that the OTP delivery flow is secure, reliable, and consistently validated before any downstream authentication or verification action is permitted.
+
+---
+
+### Scope
+
+This specification covers OTP generation, SMS dispatch, delivery state tracking, and error handling within the User Management Service. It includes the send and resend OTP capabilities, the integration with the downstream SMS delivery provider, and the validation rules governing when an OTP may be issued to a given user.
+
+---
+
+### Non-Goals
+
+- OTP verification and code validation against a submitted value is out of scope.
+- Password recovery or reset flows that may incidentally use OTP are out of scope.
+- Email-based OTP delivery is out of scope.
+- Voice-call-based OTP delivery is out of scope.
+- User registration or account activation logic is out of scope.
+- Long-term audit log storage and compliance reporting are out of scope.
+- SMS delivery provider selection, configuration, or failover strategy is out of scope.
+- End-user device or SIM card compatibility is out of scope.
+
+---
+
+### Key Entities
+
+**OTP Request**
+- Attributes: recipient phone number (text), generated code (text), creation timestamp (datetime), expiry timestamp (datetime), delivery status (enumerated: pending, delivered, failed), attempt count (integer)
+- Relationships: belongs to one User (one-to-one per active OTP window)
+
+**User**
+- Attributes: user identifier (text), registered phone number (text), account status (enumerated: active, inactive, suspended)
+- Relationships: may have at most one active OTP Request at a time
+
+---
+
+### Functional Requirements
+
+FR-001: User Management Service SHALL accept a request to send an OTP only when a valid, registered phone number is supplied by the caller.
+
+FR-002: User Management Service SHALL generate a cryptographically random numeric OTP code of a fixed length upon receiving a valid send request.
+
+[NEEDS CLARIFICATION: What is the required OTP code length (e.g., 4, 6, or 8 digits)?] (Assumed: 6 digits)
+
+FR-003: User Management Service SHALL associate the generated OTP code with the requesting user's account for the duration of the OTP validity window.
+
+FR-004: User Management Service SHALL set an expiry time on every generated OTP, after which the code is considered invalid.
+
+[NEEDS CLARIFICATION: What is the required OTP validity window duration?] (Assumed: 10 minutes from generation)
+
+FR-005: User Management Service SHALL transmit the OTP code to the user's registered phone number via the SMS Delivery Provider integration.
+
+FR-006: User Management Service SHALL record the delivery status returned by the SMS Delivery Provider against the OTP Request.
+
+FR-007: User Management Service SHALL reject a send request when the associated user account is not in an active state.
+
+FR-008: User Management Service SHALL enforce a maximum number of OTP send attempts within a rolling time window to prevent abuse.
+
+[NEEDS CLARIFICATION: What is the maximum number of OTP send attempts and the rolling window duration?] (Assumed: 5 attempts per 15-minute window per user)
+
+FR-009: User Management Service SHALL invalidate any previously active OTP for a user when a new OTP is successfully generated for that same user.
+
+FR-010: User Management Service SHALL support a resend request that follows identical generation, delivery, and rate-limiting rules as the initial send request.
+
+FR-011: User Management Service MUST NOT expose the plaintext OTP code in any response returned to the caller.
+
+FR-012: User Management Service SHALL notify the caller whether the OTP dispatch was accepted for delivery, without confirming or denying the existence of the phone number in cases where the user account cannot be located.
+
+FR-013: User Management Service SHOULD surface a distinct delivery-failure state to the caller when the SMS Delivery Provider reports that the message could not be dispatched.
+
+---
+
+### Assumptions
+
+**A-001**: The requesting caller has already been authenticated or is operating within a trusted flow (e.g., post-registration activation) before invoking OTP send. Affects: FR-001, FR-007.
+*(Assumed: Caller authentication or flow context is enforced upstream by the API Gateway.)*
+
+**A-002**: The user's phone number has been captured and stored during registration and is available to the service at the time of OTP dispatch. Affects: FR-001, FR-005.
+*(Assumed: Phone number is a mandatory field during user registration.)*
+
+**A-003**: The SMS Delivery Provider exposes a synchronous or near-synchronous acknowledgement of dispatch acceptance. Affects: FR-006, FR-013.
+*(Assumed: The provider returns a delivery acceptance status within the same transaction.)*
+
+**A-004**: OTP codes are numeric only and
+
+### Technical Design
+
+## S-101
+
+Key words MUST, MUST NOT, SHALL, SHALL NOT, SHOULD, SHOULD NOT, MAY, and OPTIONAL in this document are to be interpreted as described in RFC 2119.
+
+---
+
+# Technical Design Specification
+**Story**: US-002 – Deliver OTP via SMS
+**Service**: User Management Service (S-101)
+**Version**: 1.0
+
+---
+
+## 1. Contracts & Interfaces
+
+### 1.1 Data Model Changes
+
+**Table: `otp_requests`**
+
+The service SHALL introduce a new table `otp_requests` with the following columns:
+
+- `id` — UUID, primary key, generated server-side
+- `user_id` — VARCHAR(128), non-null, foreign key referencing `users.id`
+- `phone_number` — VARCHAR(32), non-null, stores the recipient number at time of generation
+- `code_hash` — VARCHAR(256), non-null, stores a BCrypt or HMAC-SHA256 hash of the plaintext OTP (never the plaintext itself, satisfying FR-011)
+- `status` — ENUM(`pending`, `delivered`, `failed`), non-null, default `pending`
+- `created_at` — TIMESTAMPTZ, non-null, set at insert time
+- `expires_at` — TIMESTAMPTZ, non-null, set to `created_at + 10 minutes`
+- `invalidated_at` — TIMESTAMPTZ, nullable, set when FR-009 supersession occurs
+- `attempt_sequence` — SMALLINT, non-null, monotonically incremented per user per window
+
+**Indexes:**
+
+- Unique partial index on `(user_id, invalidated_at IS NULL)` enforcing at most one active OTP per user (FR-003, FR-009)
+- Index on `(user_id, created_at)` supporting rate-limit window queries (FR-008)
+- Index on `expires_at` supporting expiry sweeps
+
+**Table: `users` (existing, altered)**
+
+No schema changes required. The service reads `account_status` and `phone_number` from the existing `users` table.
+
+**Table: `otp_rate_limit_counters`**
+
+[NEEDS CLARIFICATION: Is a Redis-based counter acceptable, or must rate-limit state be durable in PostgreSQL?] (Assumed: Redis is available as a shared cache in S-101's infrastructure.)
+
+The service SHALL maintain rate-limit state in Redis using key pattern `otp:rl:{user_id}` as a counter with a 15-minute sliding TTL, satisfying FR-008.
+
+---
+
+### 1.2 API Contract
+
+**POST /api/v1/otp/send** (existing path, new implementation)
+
+- Request body: `user_id` (string, required)
+- Success response: HTTP 202, body contains `{ "request_id": "<uuid>", "status": "accepted" }`
+- Rate-limit exceeded: HTTP 429
+- User not active: HTTP 403
+- User not found: HTTP 202 with `status: "accepted"` (FR-012 — no enumeration)
+- Provider dispatch failure: HTTP 202 with `status: "dispatch_failed"` (FR-013)
+- The plaintext OTP code SHALL NOT appear in any response field (FR-011)
+
+**POST /api/v1/otp/resend** (existing path, new implementation)
+
+- Identical request/response contract to `/send` (FR-010)
+
+---
+
+## 2. Test Strategy
+
+Tests SHALL be written before implementation merges are accepted. The following test cases are required:
+
+**Unit Tests — `OtpService`**
+
+- `test_generates_six_digit_numeric_code` — validates FR-002; asserts generated code matches `^\d{6}$`
+- `test_code_stored_as_hash_not_plaintext` — validates FR-011; asserts `otp_requests.code_hash` does not equal the raw code
+- `test_expiry_set_to_ten_minutes` — validates FR-004; asserts `expires_at - created_at == 600s`
+- `test_previous_otp_invalidated_on_new_generation` — validates FR-009; asserts prior row's `invalidated_at` is non-null after a second send
+- `test_inactive_user_raises_forbidden` — validates FR-007
+- `test_suspended_user_raises_forbidden` — validates FR-007
+- `test_unknown_user_returns_accepted` — validates FR-012; asserts HTTP 202 with no error disclosure
+
+**Unit Tests — `RateLimitGuard`**
+
+- `test_fifth_attempt_within_window_is_accepted` — validates FR-008 boundary
+- `test_sixth_attempt_within_window_is_rejected` — validates FR-008; asserts HTTP 429
+- `test_counter_resets_after_window_expiry` — validates FR-008 rolling window behavior
+
+**Unit Tests — `SmsDispatchAdapter`**
+
+- `test_delivery_status_recorded_on_provider_success
+
+## Affected Services
+
+_None identified._
+
+## API Changes
+
+_No API changes identified._
+
+## Open Questions / Gaps
+
+_No gaps identified._

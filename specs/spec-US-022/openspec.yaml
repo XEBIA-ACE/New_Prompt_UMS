@@ -1,0 +1,121 @@
+openspec: '1.0'
+story:
+  id: US-022
+  title: Add Account Deletion Option in User Settings
+  description: ''
+  feature:
+    id: F-04
+    title: Account Deletion
+  epic:
+    id: EP-001
+    title: User-Initiated Account Deletion Workflow
+  status: draft
+functional_requirement:
+  description: "## S-101\n\n### Purpose\n\nThe specification exists to define the\
+    \ functional changes necessary to add an account deletion option in user settings,\
+    \ supporting user autonomy in account management within the User Management Service.\n\
+    \n### Scope\n\nThis specification covers the implementation of a new feature allowing\
+    \ users of the User Management Service to delete their accounts, including necessary\
+    \ data inputs, outputs, and handling of edge cases.\n\n### Non-Goals\n\n1. Implementing\
+    \ data archival processes.\n2. Providing account recovery features post-deletion.\n\
+    3. Altering authentication or authorization flows unrelated to account deletion.\n\
+    4. Modifying any user notification mechanisms.\n5. Introducing multilingual support\
+    \ for user interfaces.\n\n### Key Entities\n\n- **User**: An individual account\
+    \ holder in the system.\n  - **Attributes**: user_id (string), email (string),\
+    \ account_status (string)\n- **Deletion Request**: Represents the action of a\
+    \ user requesting an account deletion.\n  - **Attributes**: request_id (string),\
+    \ user_id (string), request_timestamp (datetime), status (string)\n\n### Functional\
+    \ Requirements\n\n- FR-001: User Management Service MUST provide an option for\
+    \ users to request account deletion from user settings.\n- FR-002: User Management\
+    \ Service MUST validate the user requesting deletion is authenticated.\n- FR-003:\
+    \ User Management Service MUST confirm account deletion request through a user\
+    \ consent step.\n- FR-004: User Management Service MUST remove user data after\
+    \ confirmation, retaining information necessary for audit compliance.\n- FR-005:\
+    \ User Management Service MUST log the deletion request and its outcome for audit\
+    \ purposes.\n- FR-006: User Management Service SHALL notify the user once their\
+    \ account deletion is completed.\n- FR-007: User Management Service SHOULD provide\
+    \ users with an option to cancel a pending deletion request before it is finalized.\n\
+    - FR-008: User Management Service MUST handle edge cases such as deletion of active\
+    \ or pending accounts appropriately.\n\n### Assumptions Propagation\n\n- A-001:\
+    \ Users initiate deletion only via authenticated sessions. (Affects FR-002)\n\
+    - A-002: Deletion is irreversible once confirmed by the user. (Affects FR-004,\
+    \ FR-006)\n- No other assumptions identified.\n\n### Success Criteria\n\n- SC-001:\
+    \ At least 95% of users are able to initiate account deletions without encountering\
+    \ errors.\n- SC-002: The system deletes 100% of account data within 24 hours post-confirmation.\n\
+    - SC-003: Audit log entries for deletions are generated with a success rate of\
+    \ 100%.\n\n### Priority Levels\n\n- P1: FR-001, FR-002, FR-004\n- P2: FR-003,\
+    \ FR-005, FR-007\n- P3: FR-006, FR-008\n\n### Edge Cases\n\n- EC-001: Given an\
+    \ authenticated user, when they request account deletion while having active subscriptions,\
+    \ then the system must prompt the user to cancel subscriptions first.\n- EC-002:\
+    \ Given a user has a pending deletion request, when they login again, then the\
+    \ system must allow them to cancel the request.\n- EC-003: Given a user with pending\
+    \ legal matters, when they request account deletion, then the system must reject\
+    \ the request.\n\n### Independent Testability\n\nPreconditions: \n1. User is authenticated.\n\
+    2. User has access to account settings.\n3. User consents to deletion warnings.\n\
+    \nUser Action: User submits an account deletion request.\n\nOutcome: Account is\
+    \ flagged for deletion, and user receives a confirmation email."
+  acceptance_criteria: []
+  epic_acceptance_criteria: []
+technical_design:
+  description: "## S-101\n\nKey words MUST, MUST NOT, SHALL, SHALL NOT, SHOULD, SHOULD\
+    \ NOT, MAY, and OPTIONAL in this document are to be interpreted as described in\
+    \ RFC 2119.\n\n### Technical Design Specification for Account Deletion Feature\n\
+    \n#### Contracts & Interfaces\n\n1. **API Changes**\n\n   - **Endpoint Addition**:\
+    \ \n     - **POST /api/v1/users/{userId}/delete**\n       - Description: Allows\
+    \ a user to request account deletion.\n       - Request:\n         - Headers:\
+    \ Authorization (Bearer token)\n         - Params: `userId` (Path Parameter)\n\
+    \         - Body:\n           - `confirmation` (boolean): Indicates user consent\
+    \ for deletion.\n       - Responses:\n         - 200 OK: Request successful, account\
+    \ deletion initiated.\n         - 400 Bad Request: Missing or invalid request\
+    \ parameters.\n         - 403 Forbidden: User not authenticated.\n         - 409\
+    \ Conflict: Cannot delete due to active subscriptions or pending legal matters.\n\
+    \         - 500 Internal Server Error: Unexpected server issue.\n\n   - **DELETE\
+    \ /api/v1/users/{userId}**\n     - Description: Finalizes the account deletion\
+    \ process.\n     - Internal Call only (Secured by internal service authentication).\n\
+    \     - Responses:\n       - 204 No Content: Account deleted successfully.\n \
+    \      - 404 Not Found: User not found.\n\n2. **Data Model Changes**\n\n   - **Table:\
+    \ `users`**\n     - New Column: `deletion_requested` (boolean, default false)\n\
+    \     - Index: `(user_id, deletion_requested)`\n\n   - **Table: `deletion_requests`**\n\
+    \     - Columns:\n       - `request_id` (VARCHAR, Primary Key)\n       - `user_id`\
+    \ (VARCHAR, Foreign Key referencing `users.user_id`)\n       - `request_timestamp`\
+    \ (TIMESTAMP)\n       - `status` (VARCHAR, e.g., 'PENDING', 'CANCELLED', 'COMPLETED')\n\
+    \n3. **Inter-service Communication**\n\n   - Use of event-driven architecture\
+    \ to notify the audit service.\n     - Event: `AccountDeletionInitiated`\n   \
+    \  - Topic: `user_management.account_deletion`\n\n#### Test Strategy\n\n1. **API\
+    \ Contract Tests**\n\n   - **POST /api/v1/users/{userId}/delete**\n     - Test\
+    \ valid account deletion request and assert 200 OK.\n     - Test without authorization\
+    \ and assert 403 Forbidden.\n     - Test deletion request with pending legal matters\
+    \ and assert 409 Conflict.\n\n2. **Data Model Tests**\n\n   - Verify `deletion_requested`\
+    \ column updates to true upon deletion endpoint hit.\n   - Confirm new entries\
+    \ in `deletion_requests` table are created correctly.\n\n3. **Integration Tests**\n\
+    \n   - Simulate full deletion flow: request deletion, check audit log for event,\
+    \ finalize deletion.\n   - Test for rollback on failure conditions (e.g., network\
+    \ failures during internal DELETE call).\n\n#### Implementation Approach\n\n1.\
+    \ **Core Implementation Logic**\n\n   - **Class: `AccountDeletionService`**\n\
+    \     - **Method: `requestDeletion(String userId, boolean confirmation)`**\n \
+    \      - Confirm authentication (leveraging user session).\n       - Validate\
+    \ business rules: user consent, check for edge cases (active subscriptions, legal\
+    \ matters).\n       - Log request in `deletion_requests` table and set `deletion_requested`\
+    \ flag.\n\n     - **Method: `finalizeDeletion(String userId)`**\n       - Upon\
+    \ successful validation and request confirmation from async system processing:\n\
+    \       - Proceed with removing user data except necessary audit traces (following\
+    \ A-002).\n\n2. **Asynchronous Processing**\n\n   - Use an event queue (e.g.,\
+    \ Apache Kafka) to manage state changes from PENDING to COMPLETED.\n   - **Listener:\
+    \ `AccountDeletionListener`**\n     - Consumes `AccountDeletionInitiated` events\
+    \ and triggers `finalizeDeletion`.\n\n#### Architectural Decision Records (ADRs)\n\
+    \n- **ADR-001: RESTful API Design**\n  - Context: Needs user-initiated account\
+    \ deletion.\n  - Decision: Extend REST API with secure DELETE operation.\n  -\
+    \ Rationale: Aligns with existing REST structure, industry best practice.\n  -\
+    \ Alternative: Direct database triggers, rejected due to lack of control on transaction\
+    \ management.\n\n- **ADR-002: Event-Driven Deletion Notification**\n  - Context:\
+    \ Audit trail required for deletion.\n  - Decision: Use asynchronous messaging.\n\
+    \  - Rationale: Decouples deletion logic from audit logging, scales independently.\n\
+    \  - Alternative: Synchronous calls, potential latency issues identified.\n\n\
+    ### Simplicity Gate Assessment\n\n- **Appropriate**: All technical elements serve\
+    \ identified functional requirements—data model changes, API/endpoint, inter-service\
+    \ calls align with FR-001 to FR-008.\n\n### Affected Services and API Changes\n\
+    \n- **User Management Service**: API extended for account deletion flow.\n- **Audit\
+    \ Service**: Adds a dependency for consuming `AccountDeletionInitiated` events."
+  affected_services: []
+  api_changes: []
+gaps: []

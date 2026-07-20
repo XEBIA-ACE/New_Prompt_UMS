@@ -5,6 +5,8 @@ RUN apk add --no-cache python3 make g++
 COPY package.json package-lock.json ./
 RUN npm ci
 
+
+
 # ---- build: compile TypeScript ----
 FROM deps AS build
 WORKDIR /app

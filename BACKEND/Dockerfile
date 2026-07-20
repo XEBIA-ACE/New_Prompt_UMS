@@ -11,6 +11,7 @@ WORKDIR /app
 COPY . .
 RUN npm run build
 
+
 # ---- prod-deps: production-only node_modules ----
 FROM node:20-alpine AS prod-deps
 WORKDIR /app

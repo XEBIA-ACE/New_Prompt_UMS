@@ -1,0 +1,66 @@
+# Non-sensitive backend configuration. The backend validates its environment
+# fail-fast at startup (requireEnvString/parsePositiveInt in BACKEND/src) — a
+# missing key here means CrashLoopBackOff, so this map must stay complete.
+#
+# Sensitive values (SENDGRID_API_KEY, OTP_HASH_SECRET, ADMIN_BEARER_TOKEN) are
+# NOT here — the CD pipeline materializes them as Secret `ums-secrets` from
+# GitHub Secrets on every deploy.
+#
+# ⚠ REPLACE-ME values: the two user-facing base URLs (used inside
+# activation/recovery emails) can only be set after the first deploy creates
+# the ALB. The app boots fine with the placeholders; only email links are
+# affected. SendGrid template IDs / FROM_EMAIL are the real values from the
+# team's .env (2026-07-10).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ums-config
+  labels:
+    app.kubernetes.io/part-of: ums
+data:
+  # --- Application ---
+  PORT: "3000"
+  ACTIVATION_BASE_URL: "http://REPLACE-ME-WITH-ALB-DNS"     # link base in activation emails
+  BCRYPT_COST_FACTOR: "12"
+  TOKEN_EXPIRY_HOURS: "24"
+  # --- SendGrid (non-secret parts) ---
+  SENDGRID_TEMPLATE_ID: "d-83aefc9fa47b42b09f7a5156a4699c09" # registration activation template
+  FROM_EMAIL: "poonam.biswas@xebia.com"                      # SendGrid-verified sender
+  FROM_NAME: "User_Management_Service"
+  PASSWORD_RECOVERY_BASE_URL: "http://REPLACE-ME-WITH-ALB-DNS"
+  PASSWORD_RECOVERY_EMAIL_TEMPLATE_ID: "d-e59b14930bf4417d84dfabd841264c08"
+  PASSWORD_RECOVERY_TOKEN_EXPIRY_HOURS: "1"
+  # --- OTP ---
+  OTP_LENGTH: "6"
+  OTP_TTL_MINUTES: "10"
+  OTP_MAX_ATTEMPTS_PER_WINDOW: "5"
+  OTP_RATE_LIMIT_WINDOW_MINUTES: "15"
+  OTP_HASH_ALGORITHM: "sha256"
+  OTP_EMAIL_TEMPLATE_ID: "d-d376839647c241c7baa102f88c2ada77"
+  SMS_PROVIDER_ENABLED: "true"
+  # --- Account deletion ---
+  ACCOUNT_DELETION_OTP_EXPIRY_MINUTES: "10"
+  ACCOUNT_DELETION_REQUEST_EMAIL_TEMPLATE_ID: "d-83aefc9fa47b42b09f7a5156a4699c09"
+  ACCOUNT_DELETION_NOTICE_EMAIL_TEMPLATE_ID: "d-83aefc9fa47b42b09f7a5156a4699c09"
+  # --- Security / session tunables (source-code defaults, listed explicitly
+  # --- so the full env contract is visible here; safe to tune) ---
+  PASSWORD_MIN_LENGTH: "8"
+  PASSWORD_MAX_LENGTH: "128"
+  PASSWORD_REQUIRES_UPPERCASE: "true"
+  PASSWORD_REQUIRES_LOWERCASE: "true"
+  PASSWORD_REQUIRES_DIGIT: "true"
+  PASSWORD_REQUIRES_SPECIAL: "true"
+  SESSION_EXPIRY_SECONDS: "3600"
+  LOGIN_LOCKOUT_THRESHOLD: "5"
+  LOGIN_LOCKOUT_DURATION_MINUTES: "15"
+  # CORS allow-list. Empty = allow all origins (the app's default). With the
+  # ALB serving SPA and API from one origin this is defense-in-depth only —
+  # set to http://<alb-dns> after the first deploy to lock it down.
+  FRONTEND_ORIGIN: ""
+  # --- Infrastructure ---
+  DATABASE_PATH: "/app/data/app.db"                         # on the ums-backend-data PVC
+  REDIS_URL: "redis://ums-redis:6379"                       # in-cluster Redis Service; the app's
+                                                            # localhost default would "work" silently
+                                                            # while breaking OTP + rate limiting
+  OUTBOX_POLL_INTERVAL_MS: "30000"
+  OUTBOX_MAX_RETRIES: "1"

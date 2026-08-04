@@ -33,4 +33,13 @@ export default defineConfig({
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
+
+  // Dev-server only: the app now uses relative /api URLs (see api-client.ts),
+  // so proxy them to the local backend — mirrors what nginx does in the built
+  // image and the ALB does in Kubernetes.
+  server: {
+    proxy: {
+      '/api': 'http://localhost:3000',
+    },
+  },
 })

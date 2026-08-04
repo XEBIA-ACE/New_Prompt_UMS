@@ -1,3 +1,11 @@
+# CHANGES (EKS deployment enablement, 2026-07-10 — see DOCS/DEPLOYMENT.md):
+#   - backend gets network alias `ums-backend`: the frontend nginx now proxies
+#     /api to http://ums-backend:3000 (the Kubernetes Service name), and nginx
+#     resolves that host at startup — without the alias the frontend container
+#     would crash in compose.
+#   - frontend build arg VITE_API_BASE_URL is now "" (relative URLs): browser
+#     calls go to localhost:5173/api/... and nginx proxies them to the backend,
+#     matching exactly how traffic flows in EKS (and dropping the CORS path).
 services:
   redis:
     image: redis:7-alpine
@@ -23,6 +31,10 @@ services:
       - "3000:3000"
     volumes:
       - backend-data:/app/data
+    networks:
+      default:
+        aliases:
+          - ums-backend
     depends_on:
       redis:
         condition: service_healthy
@@ -31,7 +43,7 @@ services:
     build:
       context: ./FRONTEND
       args:
-        VITE_API_BASE_URL: http://localhost:3000
+        VITE_API_BASE_URL: ""
     restart: unless-stopped
     ports:
       - "5173:80"

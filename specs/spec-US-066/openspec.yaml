@@ -1,0 +1,164 @@
+openspec: '1.0'
+story:
+  id: US-066
+  title: Set Up Data Encryption
+  description: As a security-conscious user, I want my data to be encrypted and accessed
+    only by authorized means, so that I can ensure my privacy and data integrity.
+  feature:
+    id: F-01
+    title: User Registration
+  epic:
+    id: EP-003
+    title: Develop Backend for User Data Storage
+  status: draft
+functional_requirement:
+  description: "## S-101\n\n### Purpose\n\nThis specification defines the required\
+    \ data encryption behavior for user data managed by the User Management Service,\
+    \ ensuring privacy and integrity throughout storage and authorized access.\n\n\
+    ### Scope\n\nThis specification applies to all points where user data is stored\
+    \ or accessed in the User Management Service, covering data encryption at rest,\
+    \ secure authorized decryption, and robust key management. It specifically targets\
+    \ data from registration, authentication, OTP management, and user account lifecycle\
+    \ operations.\n\n### Non-Goals\n\n1. Encrypting data transmitted between client\
+    \ and service.\n2. Encrypting outbound notifications via email or SMS.\n3. Defining\
+    \ cryptographic algorithms or key lengths.\n4. Handling regulatory compliance\
+    \ evidence.\n5. Encrypting data stored in non-primary services.\n6. Providing\
+    \ end-user controls for encryption configuration.\n7. Addressing physical security\
+    \ of storage hardware.\n8. Supporting bring-your-own-key scenarios.\n9. Exposing\
+    \ cryptographic keys to admins or end-users.\n10. Re-encrypting data on demand\
+    \ without schema changes.\n\n### Key Entities\n\n- UserAccount  \n  - user_id\
+    \ (string)\n  - credentials (string)\n  - email (string)\n  - phone_number (string)\n\
+    \  - created_at (datetime)\n  - last_login (datetime)\n- OTPEntry  \n  - otp_id\
+    \ (string)\n  - user_id (string, relates to UserAccount 1:N)\n  - otp_value (string)\n\
+    \  - expires_at (datetime)\n  - verified (boolean)\n- AuditLog  \n  - log_id (string)\n\
+    \  - user_id (string, relates to UserAccount 1:N)\n  - action (string)\n  - timestamp\
+    \ (datetime)\n- EncryptionKey  \n  - key_id (string)\n  - key_material (string)\n\
+    \  - status (string)\n  - created_at (datetime)\n  - expires_at (datetime)\n\n\
+    ### Functional Requirements\n\nFR-001: User Management Service MUST encrypt all\
+    \ user data at rest, including user account, OTP, and audit log records.  \nFR-002:\
+    \ User Management Service MUST decrypt user data only for authorized requests\
+    \ where access is required per functional flow.  \nFR-003: User Management Service\
+    \ MUST securely store and manage encryption keys to prevent unauthorized access.\
+    \  \nFR-004: User Management Service SHALL NOT allow unencrypted user data to\
+    \ persist in temporary or permanent storage.  \nFR-005: User Management Service\
+    \ SHOULD log all decryption events, including user identity and purpose, for auditability.\
+    \  \nFR-006: User Management Service MAY rotate encryption keys periodically following\
+    \ business policy or security best practices.\n\n### Assumptions Propagation\n\
+    \nA-001: All user data within the relevant storage scope is subject to encryption\
+    \ (FR-001, FR-004).  \nA-002: Only explicit, authenticated, and authorized flows\
+    \ may access decrypted data (FR-002, FR-005).  \nA-003: Encryption key management\
+    \ is handled internally; no external key sources or user-supplied keys are involved\
+    \ (FR-003, FR-006).  \nA-004: Audit logging is a core service feature and applies\
+    \ to sensitive operations, such as decryption (FR-005).\n\n### Success Criteria\n\
+    \nSC-001: Percentage of user data records stored in encrypted form equals 100%.\
+    \  \nSC-002: Number of unauthorized access attempts to decrypted user data equals\
+    \ 0.  \nSC-003: Number of decryption events lacking an audit log entry equals\
+    \ 0.\n\n### Priority Levels\n\n- FR-001: P1 (Core user goal of encrypted storage)\n\
+    - FR-002: P1 (Authorized access to decrypted data)\n- FR-003: P1 (Essential for\
+    \ data integrity and privacy)\n- FR-004: P2 (Validates full encryption; error/alternate\
+    \ flow)\n- FR-005: P2 (Auditability; advanced validation)\n- FR-006: P3 (Periodic\
+    \ key rotation; optimization)\n\n### Edge Cases\n\nEC-001: Given a corrupted encryption\
+    \ key, When decryption is requested, Then the system SHOULD reject the operation\
+    \ and log an error. (FR-002, FR-003)  \nEC-002: Given a non-authorized user, When\
+    \ attempting to access encrypted data, Then access SHALL be denied and logged.\
+    \ (FR-002, FR-005)  \nEC-003: Given a data storage failure, When data cannot be\
+    \ encrypted, Then the operation MUST be aborted, and no unencrypted data SHALL\
+    \ persist. (FR-001, FR-004)  \nEC-004: Given key expiration, When a key is unavailable\
+    \ for decryption, Then access SHALL be denied until business policy determines\
+    \ next steps. (FR-003, FR-006)  \nEC-005: Given a request for audit log, When\
+    \ a decryption occurs, Then an entry SHOULD exist recording access. (FR-005)\n\
+    \n### Independent Testability\n\nMinimum viable test scenario:\n- Preconditions:\n\
+    \  1. A user is successfully registered.\n  2. User account data exists in the\
+    \ service.\n  3. Test data is available for retrieval.\n  4. The test user has\
+    \ valid authorization.\n  5. Encryption system is configured and operational.\n\
+    - User Action: Authorized retrieval of user account data.\n- Observable Outcome:\
+    \ Retrieved data is decrypted for authorized user, stored data remains encrypted,\
+    \ and the decryption event is logged."
+  acceptance_criteria:
+  - given_when_then: Given the user data is stored, When the data is at rest, Then
+      it should be encrypted.
+  - given_when_then: Given an authorized user requests access, When the data needs
+      to be decrypted, Then the data decryption occurs.
+  - given_when_then: Given encryption keys are needed, When storing and managing them,
+      Then keys are stored and managed securely.
+  epic_acceptance_criteria:
+  - given_when_then: Given a user data request, when the system processes it, then
+      the data should be encrypted at all times.
+  - given_when_then: Given a backup operation is triggered, when data is available,
+      then it should successfully backup without any data loss.
+  - given_when_then: Given a database update, when it occurs during high load, then
+      the system should handle it within performance requirements without affecting
+      user experience.
+technical_design:
+  description: "## S-101\n\n---\n## 1. Contracts & Interfaces\n\n### 1.1 API Contracts\n\
+    \n#### *No changes to external API request/response schemas are required*  \n\
+    All encryption and decryption operations SHALL be transparent to clients. The\
+    \ following implicit contract requirements MUST be observed:\n\n- All endpoints\
+    \ that access or persist user data (e.g., POST /api/v1/users/register, GET /api/v1/users/me)\
+    \ SHALL process encrypted data at rest and return decrypted content to authorized\
+    \ callers.\n- No new fields SHALL be added to input/output JSON, but the service’s\
+    \ internal data access objects (DAOs) and service layer SHALL enforce encryption\
+    \ and decryption on the fly.\n\n#### 1.2 Internal Service Interfaces\n\n#####\
+    \ EncryptionService Interface\n\n- String encrypt(String plaintext, KeyReference\
+    \ keyRef)\n- String decrypt(String ciphertext, KeyReference keyRef)\n- KeyReference\
+    \ getActiveEncryptionKey()\n- void rotateEncryptionKey()\n- void validateKeyStatus(KeyReference\
+    \ keyRef) // throws on expired/corrupted\n\n##### AuditLogger Interface\n\n- void\
+    \ logDecryptionEvent(String userId, String purpose, String actorId, Date timestamp)\n\
+    \n##### KeyManagementService Interface\n\n- KeyReference generateKey()\n- KeyReference\
+    \ fetchKey(String keyId)\n- void markKeyExpired(String keyId)\n\n#### 1.3 Data\
+    \ Schemas\n\n##### UserAccount Table\n\n- credentials, email, phone_number columns\
+    \ MUST be stored as VARBINARY or BYTEA, NOT as plain VARCHAR.\n- Additional metadata\
+    \ column: encryption_key_id (references EncryptionKey.key_id)\n\n##### OTPEntry\
+    \ Table\n\n- otp_value column MUST be VARBINARY/BYTEA.\n- encryption_key_id column\
+    \ (references EncryptionKey.key_id)\n\n##### AuditLog Table\n\n- Add decryption_purpose\
+    \ (nullable string)\n- Add actor_id (nullable string)\n\n##### EncryptionKey Table\n\
+    \n- key_id (PK), key_material (encrypted in KMS/HSM), status, created_at, expires_at\n\
+    \n##### Indexes\n\n- New index on UserAccount(encryption_key_id)\n- New index\
+    \ on OTPEntry(encryption_key_id)\n\n---\n\n## 2. Test Strategy\n\n1. **Test: Encrypted\
+    \ Storage (FR-001, FR-004, SC-001)**\n    - Create user/account/otp records; validate\
+    \ at-PG level that credentials, email, phone_number, otp_value data is unreadable\
+    \ as cleartext.\n    - Assert all data fields are non-NULL and non-plaintext following\
+    \ persistence.\n2. **Test: Authorized Decryption (FR-002, SC-002)**\n    - Authenticate\
+    \ as user; perform GET /api/v1/users/me; assert returned values are correctly\
+    \ decrypted and match original values.\n    - Attempt unauthorized access, assert\
+    \ HTTP 403 and no decryption attempted.\n3. **Test: Audit Logging (FR-005, EC-002,\
+    \ SC-003)**\n    - Trigger authorized decryption; check AuditLog for event with\
+    \ correct user, purpose, actor.\n    - Attempt unauthorized access; check AuditLog\
+    \ for denied event.\n    - Negative: forcibly fail audit log; ensure decryption\
+    \ aborts.\n4. **Test: Key Management Failure (EC-001, EC-004)**\n    - Simulate\
+    \ corrupted or expired key access via test harness; assert decryption is rejected\
+    \ and error is logged.\n5. **Test: Data Integrity (EC-003)**\n    - Simulate storage\
+    \ failure (e.g. disk or DB error after encryption but before write); assert no\
+    \ cleartext data remains, operation rolls back.\n\n---\n\n## 3. Implementation\
+    \ Approach\n\n### 3.1 Service Classes\n\n- EncryptionServiceImpl: handles encrypt(),\
+    \ decrypt(), key rotation\n- KeyManagementServiceImpl: generates, fetches, invalidates\
+    \ keys; interacts w/ HSM or KMS [NEEDS CLARIFICATION: Is there an org standard\
+    \ KMS/HSM, or must we implement our own?] (Assumed: Internal service with software-based\
+    \ encryption-key store)\n- TransparentEncryptionJpaConverter: JPA attribute converter\
+    \ to apply EncryptionService.encrypt()/decrypt() on mapped columns (marked via\
+    \ @Convert)\n\n### 3.2 Entity Changes\n\n- UserAccountEntity: @Convert(converter\
+    \ = TransparentEncryptionJpaConverter.class) on credentials, email, phoneNumber\n\
+    - OTPEntryEntity: @Convert(...) on otpValue\n- encryptionKeyId property mapped\
+    \ and set on row creation\n- All DAOs & repositories updated to exclude raw values\
+    \ from logs, debugging, and error traces\n\n### 3.3 Secure Key Storage\n\n- EncryptionKey\
+    \ material is never exposed to the application; fetched and used via KMS API or\
+    \ secret management lib\n- Key references/id only retained in main DB schemas\n\
+    \n### 3.4 Decryption Flow Enforcement\n\n- All service-layer access to user/otp/audit\
+    \ data passes through an authorization interceptor (AuthorizationAspect)\n- AuthorizationAspect\
+    \ checks for user permissions, then proceeds with decrypt() calls\n- AuditLogger\
+    \ logs all authorized decryption and access denial attempts\n\n### 3.5 Key Rotation\n\
+    \n- Periodic job: KeyRotationScheduler triggers EncryptionService.rotateEncryptionKey(),\
+    \ marks old keys as expired\n\n### 3.6 Failure Handling\n\n- All decrypt() calls\
+    \ wrapped; corrupted/expired keys throw KeyInvalidException, handled at service\
+    \ edge with standardized error (HTTP 500 or 403 as appropriate)\n- Storage failures\
+    \ rollback partially-written data\n\n---\n\n## 4. Architectural Decision Records\
+    \ (ADRs)\n\n**ADR-001:** Column-level encryption using JPA Converter and centralized\
+    \ EncryptionService  \n- *Context*: Fine-grained field encryption or whole-table\
+    \ encryption needed.  \n- *Decision*: Use JPA AttributeConverter for critical\
+    \ fields, invoke EncryptionService for serialization.  \n- *Rationale*: Transparent\
+    \ for devs/clients, reduces risk of accidental exposure, aligns with FR-001/FR-004.\
+    \  \n- *Alternative*: Encrypt/decrypt at controller/service level—REJECTED: error-prone,\
+    \ risk of omission"
+  affected_services: []
+  api_changes: []
+gaps: []

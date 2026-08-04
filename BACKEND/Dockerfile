@@ -27,6 +27,7 @@ COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json ./
 COPY db ./db
+COPY openapi.yaml ./
 RUN mkdir -p /app/data && chown -R app:app /app
 USER app
 EXPOSE 3000

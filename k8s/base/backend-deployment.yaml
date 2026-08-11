@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ums-backend
+  labels:
+    app: ums-backend
+    app.kubernetes.io/part-of: ums
+spec:
+  # SQLite on a ReadWriteOnce EBS volume: exactly 1 replica, and Recreate —
+  # RollingUpdate would deadlock (new pod waits forever for the volume the old
+  # pod still holds).
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ums-backend
+  template:
+    metadata:
+      labels:
+        app: ums-backend
+    spec:
+      # The image's Dockerfile user `app` has a distro-assigned (non-
+      # deterministic) uid. We pin explicit ids instead so fsGroup can make the
+      # EBS volume writable: without fsGroup the mounted volume is root-owned
+      # and better-sqlite3 crashes on first write. Image files remain world-
+      # readable, so overriding the uid is safe.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: backend
+          image: ums-backend # resolved to the ECR image by the prod overlay
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: ums-config
+            - secretRef:
+                name: ums-secrets # created by the CD pipeline from GitHub Secrets
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+          # /health is unauthenticated and returns 200 {"status":"ok",db_reachable}.
+          # startupProbe allows up to 150s for the native better-sqlite3 module
+          # load + boot-time migrations (server.ts runs runMigrations()).
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: ums-backend-data

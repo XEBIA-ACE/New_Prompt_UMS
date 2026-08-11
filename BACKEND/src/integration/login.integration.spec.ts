@@ -2,6 +2,7 @@ process.env.ADMIN_BEARER_TOKEN = 'test-admin-token';
 process.env.SENDGRID_API_KEY = 'SG.test-key';
 process.env.SENDGRID_TEMPLATE_ID = 'd-test-template';
 process.env.ACTIVATION_BASE_URL = 'https://example.test';
+process.env.FROM_EMAIL = 'no-reply@example.test';
 process.env.PASSWORD_RECOVERY_BASE_URL = 'https://example.test';
 process.env.PASSWORD_RECOVERY_EMAIL_TEMPLATE_ID = 'd-test-recovery-template';
 // createApp also boots the OTP feature — these satisfy its fail-fast config
@@ -30,10 +31,25 @@ import { createTestDb, clearAllTables, closeTestDb, TestDb } from './test-db';
 
 const TEST_PASSWORD = 'Passw0rd!';
 
-/** No-op stand-in — this spec doesn't exercise OTP routes. */
-class NoopOtpDeliveryPort implements OtpDeliveryPort {
-  async dispatch(): Promise<boolean> {
+/**
+ * Captures every dispatched OTP code instead of calling a real delivery
+ * provider, so `registerAndActivateUser` can retrieve the code needed to
+ * submit the real code back to POST /api/v1/otp/verify.
+ */
+class RecordingOtpDeliveryPort implements OtpDeliveryPort {
+  public dispatched: Array<{ destination: string; code: string }> = [];
+
+  async dispatch(destination: string, code: string): Promise<boolean> {
+    this.dispatched.push({ destination, code });
     return true;
+  }
+
+  codeFor(destination: string): string {
+    const match = [...this.dispatched].reverse().find((entry) => entry.destination === destination);
+    if (!match) {
+      throw new Error(`No OTP was dispatched to ${destination}`);
+    }
+    return match.code;
   }
 }
 
@@ -61,6 +77,7 @@ let testDb: TestDb;
 let db: Database;
 let otpRedisClient: Redis;
 let emailDeliveryPort: RecordingEmailDeliveryPort;
+let otpDeliveryPort: RecordingOtpDeliveryPort;
 
 function randomSuffix(): string {
   return Math.random().toString(36).slice(2, 10);
@@ -87,13 +104,9 @@ async function registerAndActivateUser(
     .send(payload)
     .expect(201);
   const userId = registerResponse.body.userId;
+  const code = otpDeliveryPort.codeFor(payload.emailAddress);
 
-  const tokenRow = db
-    .prepare('SELECT token_value FROM activation_tokens WHERE user_id = ?')
-    .get(userId) as { token_value: string };
-  const tokenValue = tokenRow.token_value;
-
-  await request(app).post('/api/v1/users/activate').send({ token: tokenValue }).expect(200);
+  await request(app).post('/api/v1/otp/verify').send({ userId, passcode: code }).expect(200);
 
   return { userId, email: payload.emailAddress, password: payload.password };
 }
@@ -103,12 +116,14 @@ beforeAll(async () => {
   db = testDb.db;
   otpRedisClient = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379');
   emailDeliveryPort = new RecordingEmailDeliveryPort();
+  otpDeliveryPort = new RecordingOtpDeliveryPort();
   const appModule = await import('../app');
-  app = appModule.createApp(db, otpRedisClient, new NoopOtpDeliveryPort(), emailDeliveryPort);
+  app = appModule.createApp(db, otpRedisClient, otpDeliveryPort, emailDeliveryPort);
 });
 
 afterEach(async () => {
   emailDeliveryPort.dispatched = [];
+  otpDeliveryPort.dispatched = [];
   clearAllTables(db);
 });
 

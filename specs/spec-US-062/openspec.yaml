@@ -1,0 +1,111 @@
+openspec: '1.0'
+story:
+  id: US-062
+  title: Email Format Validation
+  description: ''
+  feature:
+    id: F-01
+    title: User Registration
+  epic:
+    id: EP-002
+    title: Implement Data Validation for Registration
+  status: draft
+functional_requirement:
+  description: "## S-101\n\n### Purpose\n\nThis specification defines the functional\
+    \ requirements for the User Management Service to perform email format validation\
+    \ during user registration, ensuring valid email inputs to maintain data integrity\
+    \ and successful user account creation.\n\n### Scope\n\nThis specification exclusively\
+    \ covers the email format validation capability within the User Management Service\
+    \ during the user registration process. This entails checking the structure of\
+    \ an email input against a predefined format standard to guarantee it meets acceptable\
+    \ criteria.\n\n### Non-Goals\n\n1. Validate email domains.\n2. Authenticate email\
+    \ servers.\n3. Detect disposable email addresses.\n4. Validate emails in other\
+    \ service contexts.\n5. Handle email delivery.\n6. Manage user account verification.\n\
+    7. Interact with external validation services.\n8. Perform email security checks.\n\
+    9. Validate email content.\n10. Validate emails in already registered accounts.\n\
+    \n### Key Entities\n\n- **EmailAddress**  \n  - Attributes:  \n    - `address`\
+    \ (string)\n  - Relationships:  \n    - Linked to `User` (1:1)\n\n- **User** \
+    \ \n  - Attributes:  \n    - `email` (EmailAddress)\n\n### Functional Requirements\n\
+    \n- **FR-001**: The User Management Service MUST validate that the email address\
+    \ provided during registration conforms to a standard format (e.g., local@domain).\n\
+    - **FR-002**: The system MUST reject email addresses that do not meet the format\
+    \ standard with an appropriate error message.\n- **FR-003**: The system SHOULD\
+    \ log validation results for monitoring and debugging purposes.\n  \n### Assumptions\
+    \ Propagation\n\n- **A-001**: Email validation will only check for format compliance,\
+    \ not email domain validity.  \n  - Cross-reference: FR-001, FR-002\n\n### Success\
+    \ Criteria\n\n- **SC-001**: The percentage of email registration attempts blocked\
+    \ for invalid format errors SHALL be at most 5%.\n- **SC-002**: The validation\
+    \ error rate for valid emails SHALL be less than 1%.\n\n### Priority Levels\n\n\
+    - **P1**: FR-001 \n- **P2**: FR-002, FR-003 \n\n### Edge Cases\n\n- **EC-001**:\
+    \  \n  - Given: A user provides an email without \"@\" symbol  \n  - When: The\
+    \ email is submitted for registration  \n  - Then: The system SHALL reject the\
+    \ email with a \"missing @ symbol\" error\n\n- **EC-002**:  \n  - Given: A user\
+    \ provides an email with invalid characters (e.g., spaces)  \n  - When: The email\
+    \ is submitted for registration  \n  - Then: The system SHALL reject the email\
+    \ with an \"invalid character\" error\n\n### Independent Testability\n\nTo test\
+    \ the email format validation, the following minimal scenario must be executed:\n\
+    \n- Preconditions:\n  1. User registration interface is accessible.\n  2. Email\
+    \ entry field is available.\n  3. Guidelines for valid email format are provided.\n\
+    - User Action: Enter an email address and submit the registration form.\n- Observable\
+    \ Outcome: The system either accepts the registration or provides an error message\
+    \ indicating format violations.\n\n### Context\n\n- **Service**: User Management\
+    \ Service\n- **Story**: Email Format Validation\n- **Feature**: User Registration"
+  acceptance_criteria: []
+  epic_acceptance_criteria: []
+technical_design:
+  description: "## S-101\n\n```\nKey words MUST, MUST NOT, SHALL, SHALL NOT, SHOULD,\
+    \ SHOULD NOT, MAY, and OPTIONAL in this document are to be interpreted as described\
+    \ in RFC 2119.\n```\n\n### Contracts & Interfaces\n\n**API Endpoint**  \n- **Path**:\
+    \ `POST /api/v1/user/register`  \n- **Request Payload**:  \n  - `email` (string):\
+    \ Email address to be validated  \n  - Other user details [NEEDS CLARIFICATION:\
+    \ What other user details are required for registration?] (Assumed: generic user\
+    \ details such as username and password are also part of registration)  \n- **Response**:\
+    \  \n  - **200 OK**: Registration successful  \n  - **400 Bad Request**: Invalid\
+    \ email format  \n  - **Error Payload**:  \n    - `code` (string): Error code\
+    \  \n    - `message` (string): Description of the error (e.g., \"Invalid email\
+    \ format: missing @ symbol\")\n\n**Data Model**  \n- **EmailAddress Table**:\n\
+    \  - `address` VARCHAR(255)\n  - **Indexes**:  \n    - `idx_email_address` UNIQUE(email)\n\
+    \n- **User Table**:  \n  - `email` VARCHAR(255) REFERENCES EmailAddress(address)\n\
+    \n### Test Strategy\n\n1. **Test Case 1**: Valid Email Format  \n   - **Objective**:\
+    \ Validate that a correct email format is accepted by the system.  \n   - **Input**:\
+    \ `email = \"test@example.com\"`  \n   - **Expected Output**: Registration is\
+    \ successful (`200 OK`).\n\n2. **Test Case 2**: Missing @ Symbol  \n   - **Objective**:\
+    \ Ensure that emails without \"@\" are rejected.  \n   - **Input**: `email = \"\
+    testexample.com\"`  \n   - **Expected Output**: Error with message \"Invalid email\
+    \ format: missing @ symbol\" (`400 Bad Request`).\n\n3. **Test Case 3**: Invalid\
+    \ Characters  \n   - **Objective**: Test rejection for emails containing spaces\
+    \ or other illegal characters.  \n   - **Input**: `email = \"test@ example.com\"\
+    `  \n   - **Expected Output**: Error with message \"Invalid email format: invalid\
+    \ character\" (`400 Bad Request`).\n   \nEach test SHALL validate API response\
+    \ properties including status codes and error messages.\n\n### Implementation\
+    \ Approach\n\n1. **Email Validation Logic**:\n   - Implement `EmailValidator`\
+    \ class in Node.js.\n   - Method `validateFormat(email: string): boolean` SHALL\
+    \ utilize regular expression such as `/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}$/`\
+    \ to verify valid email formats.\n   - Method SHALL throw `ValidationError` with\
+    \ specific message based on error type.\n\n2. **Controller Changes**:\n   - Modify\
+    \ `UserController` class to include pre-validation in the `registerUser` method.\n\
+    \   - Invocation of `EmailValidator.validateFormat` MUST occur prior to database\
+    \ operations.\n\n3. **Inter-Service Communication**:\n   - Not applicable, as\
+    \ this change is isolated within User Management Service.\n\n4. **Logging**:\n\
+    \   - Implement logging in the `UserController.registerUser` method using integrated\
+    \ logging library to record success or failure of email validation for monitoring.\n\
+    \n### Architectural Decision Records (ADRs)\n\n- **ADR-001**: Use RegExp for Email\
+    \ Validation  \n  - **Context**: Email format validation is required during user\
+    \ registration.  \n  - **Decision**: Use regular expressions in `EmailValidator`\
+    \ for email format validation.  \n  - **Rationale**: Regular expressions provide\
+    \ a robust method to match patterns efficiently.  \n  - **Alternative**: Implement\
+    \ a sequence of string operations; rejected due to complexity and inefficiency\
+    \ in pattern matching.\n\n### Simplicity Gate Assessment\n\n- **Assessment**:\
+    \ Appropriate  \n  - Each technical design element directly maps to one or more\
+    \ functional requirements (e.g., RegExp validation to FR-001).\n  - No over-engineered\
+    \ components; maintains simplicity by employing RegExp without unnecessary inter-service\
+    \ calls or external service dependencies.\n\n### Affected Services and API Changes\n\
+    \n- **Affected Service**: User Management Service\n- **API Changes**:\n  - Updated\
+    \ email validation logic in existing registration endpoint (`POST /api/v1/user/register`).\n\
+    \nThis specification provides detailed architectural, implementation, and testing\
+    \ guidance for adding email format validation to the User Management Service's\
+    \ registration process, ensuring compliance with the given functional requirements\
+    \ and adaptation of best practices."
+  affected_services: []
+  api_changes: []
+gaps: []

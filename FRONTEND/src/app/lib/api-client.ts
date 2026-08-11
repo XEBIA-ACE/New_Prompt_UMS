@@ -25,7 +25,12 @@ import type {
 } from "../types/deletion.types";
 import type { ProfileErrorResponse, UserProfileResponse } from "../types/profile.types";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+// Empty string = same-origin relative URLs (all call paths already start with
+// /api/...): in Kubernetes/docker the nginx in this image and the ALB route
+// /api to the backend, so one build works in every environment. `??` (not ||)
+// so an explicitly-empty build arg isn't clobbered by a localhost fallback.
+// Local `vite dev` keeps working via the /api proxy in vite.config.ts.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
 export type ApiResult<TSuccess, TError> =
   | { ok: true; data: TSuccess }

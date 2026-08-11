@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ums-backend
+  labels:
+    app: ums-backend
+    app.kubernetes.io/part-of: ums
+  annotations:
+    # Read by the AWS Load Balancer Controller for this service's target group:
+    # the backend serves 200 on /health, but 404 on / — without this the ALB
+    # would mark every backend target unhealthy.
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+spec:
+  selector:
+    app: ums-backend
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http

@@ -1,0 +1,18 @@
+# Production overlay — cluster aiops-prod (us-east-1), namespace ums.
+#
+# The image tags below are placeholders: the CD pipeline
+# (.github/workflows/cd-deploy-reusable.yml) rewrites them on every deploy with
+#   kustomize edit set image ums-backend=<ecr>/ums-backend:sha-<short> ...
+# Deploying this overlay by hand requires setting real tags first — `bootstrap`
+# does not exist in ECR and will fail the CD pipeline's ECR existence check.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+images:
+  - name: ums-backend
+    newName: 864899865567.dkr.ecr.us-east-1.amazonaws.com/ums-backend
+    newTag: bootstrap
+  - name: ums-frontend
+    newName: 864899865567.dkr.ecr.us-east-1.amazonaws.com/ums-frontend
+    newTag: bootstrap

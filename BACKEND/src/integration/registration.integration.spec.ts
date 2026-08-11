@@ -2,6 +2,9 @@ process.env.ADMIN_BEARER_TOKEN = 'test-admin-token';
 process.env.SENDGRID_API_KEY = 'SG.test-key';
 process.env.SENDGRID_TEMPLATE_ID = 'd-test-template';
 process.env.ACTIVATION_BASE_URL = 'https://example.test';
+process.env.FROM_EMAIL = 'no-reply@example.test';
+process.env.PASSWORD_RECOVERY_BASE_URL = 'https://example.test';
+process.env.PASSWORD_RECOVERY_EMAIL_TEMPLATE_ID = 'd-test-recovery-template';
 // createApp now also boots the OTP feature (task 7) — these satisfy its
 // fail-fast config checks even though this spec doesn't exercise OTP routes.
 process.env.OTP_HASH_SECRET = 'test-otp-secret';

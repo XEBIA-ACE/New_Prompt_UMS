@@ -4,7 +4,10 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-ARG VITE_API_BASE_URL=http://localhost:3000
+# Default "" = same-origin relative API URLs — correct everywhere the SPA is
+# served behind this image's nginx (which proxies /api to the backend) or the
+# EKS ALB. Override only for split-origin setups (e.g. SPA on a CDN).
+ARG VITE_API_BASE_URL=""
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 RUN npm run build
 

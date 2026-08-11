@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ums-frontend
+  labels:
+    app: ums-frontend
+    app.kubernetes.io/part-of: ums
+  annotations:
+    # SPA index responds 200 on / — explicit for symmetry with the backend service.
+    alb.ingress.kubernetes.io/healthcheck-path: /
+spec:
+  selector:
+    app: ums-frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

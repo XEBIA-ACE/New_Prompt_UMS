@@ -2,6 +2,7 @@ process.env.ACTIVATION_BASE_URL = 'https://app.example.test';
 process.env.ADMIN_BEARER_TOKEN = 'test-admin-token';
 process.env.SENDGRID_API_KEY = 'SG.test-key';
 process.env.SENDGRID_TEMPLATE_ID = 'd-test-template';
+process.env.FROM_EMAIL = 'no-reply@example.test';
 process.env.PASSWORD_RECOVERY_BASE_URL = 'https://app.example.test';
 process.env.PASSWORD_RECOVERY_EMAIL_TEMPLATE_ID = 'd-test-recovery-template';
 

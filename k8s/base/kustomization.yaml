@@ -1,0 +1,20 @@
+# UMS Kustomize base.
+#
+# NOTE: There is deliberately NO Namespace resource here. The namespace `ums`
+# and the StorageClass `ums-gp3` are cluster-scoped and pre-provisioned by
+# infra (2026-07-10, see DOCS/DEPLOYMENT.md) — the CI/CD deploy role's EKS
+# access entry (AmazonEKSEditPolicy) is scoped to namespace `ums` and cannot
+# manage cluster-scoped objects.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: ums
+resources:
+  - configmap.yaml
+  - backend-pvc.yaml
+  - backend-deployment.yaml
+  - backend-service.yaml
+  - frontend-deployment.yaml
+  - frontend-service.yaml
+  - redis-deployment.yaml
+  - redis-service.yaml
+  - ingress.yaml

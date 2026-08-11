@@ -1,0 +1,177 @@
+openspec: '1.0'
+story:
+  id: US-061
+  title: Send Confirmation Email on Registration Completion
+  description: As a user, I want to receive a confirmation email after registration
+    so that I have proof and can verify my account.
+  feature:
+    id: F-01
+    title: User Registration
+  epic:
+    id: EP-001
+    title: Design User Registration Interface
+  status: draft
+functional_requirement:
+  description: "## S-101\n\nKey words MUST, MUST NOT, SHALL, SHALL NOT, SHOULD, SHOULD\
+    \ NOT, MAY, and OPTIONAL in this document are to be interpreted as described in\
+    \ RFC 2119.\n\n### Purpose\n\nThis specification defines functional requirements\
+    \ for sending a confirmation email after user registration, providing proof of\
+    \ registration and facilitating account verification as part of the User Management\
+    \ Service.\n\n### Scope\n\nThis specification applies to successful completions\
+    \ of the user registration capability within the User Management Service and details\
+    \ responsibilities for user notification, auditing, and external communication\
+    \ with email delivery.\n\n### Non-Goals\n\n1. Handling of failed or incomplete\
+    \ user registrations\n2. Password reset or forgotten password flows\n3. Delivery\
+    \ status tracking after the SMTP Service accepts email\n4. User interface for\
+    \ registration\n5. Rate limiting or anti-abuse measures for registration\n6. SMS\
+    \ or other out-of-band notification channels\n7. Email content localization or\
+    \ customization beyond registration details\n8. Management of SMTP Service credentials\n\
+    9. Resending confirmation emails on user request\n10. Changes to inbound email\
+    \ processing\n\n### Key Entities\n\n- User\n    - user_id: UUID\n    - email:\
+    \ string\n    - registration_status: enum\n    - created_at: datetime\n\n- ConfirmationEmail\n\
+    \    - user_id: UUID (references User)\n    - email_sent_at: datetime\n    - verification_link:\
+    \ string (nullable)\n    - delivery_status: enum\n\n- AuditLogEntry\n    - entry_id:\
+    \ UUID\n    - user_id: UUID (references User)\n    - action: string\n    - timestamp:\
+    \ datetime\n    - details: string\n\n### Functional Requirements\n\nFR-001: User\
+    \ Management Service SHALL send a confirmation email to the user's registered\
+    \ email address upon successful registration completion. (P1)\n\nFR-002: User\
+    \ Management Service SHALL include pertinent registration details in the confirmation\
+    \ email, such as the user's email address and account creation timestamp. (P1)\n\
+    \nFR-003: User Management Service SHALL include a verification link in the confirmation\
+    \ email if the user's account requires verification. (P1) [NEEDS CLARIFICATION:\
+    \ Under what conditions is account verification required?] (Assumed: All new accounts\
+    \ require email verification)\n\nFR-004: User Management Service SHALL ensure\
+    \ each confirmation email send action is reliably logged as an AuditLogEntry.\
+    \ (P2)\n\nFR-005: User Management Service MUST NOT send a confirmation email when\
+    \ registration fails or is incomplete. (P2)\n\nFR-006: User Management Service\
+    \ SHALL treat registration as incomplete if required registration fields are missing,\
+    \ and SHALL NOT trigger confirmation email in such cases. (P2)\n\nFR-007: User\
+    \ Management Service SHOULD attempt to retry email delivery up to a defined number\
+    \ of times if initial sending fails, and SHALL persist failure status if retries\
+    \ are exhausted. (P2) [NEEDS CLARIFICATION: What is the allowed retry count and\
+    \ interval?] (Assumed: 3 retries, 2 minutes interval)\n\nFR-008: User Management\
+    \ Service SHALL record the delivery status (success or failure) associated with\
+    \ each attempted confirmation email. (P2)\n\nFR-009: User Management Service SHALL\
+    \ integrate with the SMTP Service to transmit outbound confirmation emails. (P1)\n\
+    \nFR-010: User Management Service SHOULD notify administrators if persistent email\
+    \ delivery failures occur for registration confirmations. (P3)\n\n### Assumptions\
+    \ Propagation\n\nA-001: All new accounts require email verification. (FR-003)\n\
+    \nA-002: Confirmation emails are sent only for successful, complete registrations.\
+    \ (FR-001, FR-005, FR-006)\n\nA-003: Maximum retry count for email delivery is\
+    \ 3, with 2-minute intervals. (FR-007)\n\n### Success Criteria\n\nSC-001: Percentage\
+    \ of registrations resulting in a confirmation email send action logged as successful\
+    \ equals at least 99%.\n\nSC-002: Confirmation email contains the user's email\
+    \ address and account creation timestamp in 100% of sent cases.\n\nSC-003: If\
+    \ account verification is required, confirmation email includes a distinct verification\
+    \ link in 100% of such cases.\n\n### Priority Levels\n\n- P1: FR-001, FR-002,\
+    \ FR-003, FR-009\n- P2: FR-004, FR-005, FR-006, FR-007, FR-008\n- P3: FR-010\n\
+    \n### Edge Cases\n\nEC-001: Given a new registration with a malformed email address,\
+    \ When the confirmation email send attempt occurs, Then the system SHALL NOT send\
+    \ the email and SHALL log a delivery failure. (FR-001, FR-007, FR-008)\n\nEC-002:\
+    \ Given a loss of connectivity to SMTP Service during send attempt, When retry\
+    \ count is exhausted, Then the system SHALL record a persistent failure status\
+    \ and SHOULD notify an administrator. (FR-007, FR-008, FR-010)\n\nEC-003: Given\
+    \ a registration with missing mandatory attributes, When processing completes,\
+    \ Then the system SHALL NOT send a confirmation email or create an AuditLogEntry\
+    \ for email delivery. (FR-005, FR-006)\n\nEC-004: Given the completed registration\
+    \ and confirmation email is sent, When SMTP Service returns an immediate permanent\
+    \ failure, Then no further retries SHALL be attempted. (FR-007)\n\nEC-005: Given\
+    \ user registration completes and email is sent but user reports non-delivery,\
+    \ When no permanent failure is logged, Then administrators MAY manually trigger\
+    \ investigation or resend outside system scope. (FR-004, FR-008)\n\n### Independent\
+    \ Testability\n\nMinimum test scenario: Preconditions — 1) User completes the\
+    \ registration form with valid data; 2) Registration is deemed successful; 3)\
+    \ SMTP Service is available. User action — Register account. Observable outcome\
+    \ — User receives a confirmation email containing their registration details and\
+    \ a verification link."
+  acceptance_criteria:
+  - given_when_then: Given a successful registration, When it completes, Then a confirmation
+      email is sent to the user.
+  - given_when_then: Given the confirmation email, When it is received, Then it contains
+      relevant registration details and a verification link if applicable.
+  - given_when_then: Given the registration system, When a confirmation email is sent,
+      Then this action is reliable and logged for auditing.
+  epic_acceptance_criteria:
+  - given_when_then: Given a new user, when they access the registration page, then
+      they should be able to see options for email and social media login.
+  - given_when_then: Given a user filling out the registration form, when they enter
+      a weak password, then they should see a password strength indicator warning.
+  - given_when_then: Given a user on any device, when they access the registration
+      page, then the page should be responsive and accessible.
+  - given_when_then: Given an unregistered user, when they complete the registration
+      form and submit it, then they should receive a confirmation email.
+technical_design:
+  description: "## S-101\n\nKey words MUST, MUST NOT, SHALL, SHALL NOT, SHOULD, SHOULD\
+    \ NOT, MAY, and OPTIONAL in this document are to be interpreted as described in\
+    \ RFC 2119.\n\n---\n\n## 1. Contracts & Interfaces\n\n### 1.1 API Contracts\n\n\
+    No new externally-facing REST endpoints are introduced. User registration confirmation\
+    \ email behavior SHALL be integrated into POST `/api/v1/users/register`.  \n-\
+    \ Request: Unchanged.  \n- Response: Unchanged (registration success/failure),\
+    \ but internal post-processing triggers confirmation email send logic.\n\n####\
+    \ Internal SMTP Service Interface\n- Method: `sendConfirmationEmail(to: string,\
+    \ subject: string, body: string) ⇒ SendResult`\n- SendResult: `{ success: boolean,\
+    \ errorMessage?: string, permanentFailure: boolean }`\n\n### 1.2 Data Schemas\n\
+    \n#### Table: confirmation_emails\n\n| Column              | Type      | Constraints\
+    \                  | Description                                  |\n|---------------------|-----------|------------------------------|----------------------------------------------|\n\
+    | confirmation_id     | UUID      | PK, generated                | Unique record\
+    \ identifier                     |\n| user_id             | UUID      | FK ->\
+    \ users.user_id          | Registered user's ID                         |\n| email_sent_at\
+    \       | TIMESTAMP |                              | UTC timestamp of last send\
+    \ attempt           |\n| verification_link   | TEXT      | nullable          \
+    \           | Account verification URL                     |\n| delivery_status\
+    \     | VARCHAR   | NOT NULL                     | Enum: 'pending', 'success',\
+    \ 'permanent_failure', 'temporary_failure' |\n| retry_count         | INT    \
+    \   | DEFAULT 0                    | Number of send attempts                 \
+    \     |\n| last_error_msg      | TEXT      | nullable                     | Last\
+    \ send failure message, if any            |\n\n**Indexes**:  \n- IDX_confirmation_emails_user_id\
+    \ (user_id)  \n- IDX_confirmation_emails_status (delivery_status)\n\n#### Enum:\
+    \ confirmation_email_delivery_status\n\n- 'pending'\n- 'success'\n- 'permanent_failure'\n\
+    - 'temporary_failure'\n\n#### AuditLogEntry (existing)\n- Table: audit_log_entries\n\
+    - No schema changes; usages SHALL include new audit log types (`'REGISTRATION_CONFIRMATION_EMAIL_SENT'`,\
+    \ `'REGISTRATION_CONFIRMATION_EMAIL_FAILED'`).\n\n---\n\n## 2. Test Strategy\n\
+    \n### 2.1 Core Positive Path\n\n**Test T-001**: Registration triggers confirmation\
+    \ email  \n- Setup: User registers with valid data  \n- Action: POST `/api/v1/users/register`\
+    \  \n- Assert:  \n  - New entry in confirmation_emails with status 'success' \
+    \ \n  - Email body contains email, creation timestamp, verification link  \n \
+    \ - AuditLogEntry with action 'REGISTRATION_CONFIRMATION_EMAIL_SENT' created\n\
+    \n### 2.2 Missing Required Field\n\n**Test T-002**: Registration with missing\
+    \ email  \n- Setup: User registers without email  \n- Action: POST `/api/v1/users/register`\
+    \  \n- Assert:  \n  - No confirmation_emails created  \n  - No AuditLogEntry for\
+    \ confirmation email\n\n### 2.3 Malformed Email\n\n**Test T-003**: Registration\
+    \ with malformed email  \n- Setup: User registers with invalid email  \n- Assert:\
+    \  \n  - confirmation_emails entry with 'permanent_failure', error message present\
+    \  \n  - AuditLogEntry with 'REGISTRATION_CONFIRMATION_EMAIL_FAILED'\n\n### 2.4\
+    \ SMTP Temporary Failure, Retry\n\n**Test T-004**: SMTP down, recovers after 2\
+    \ attempts  \n- Simulate SMTP temp failure -> success  \n- Assert:  \n  - retry_count\
+    \ is 2  \n  - delivery_status transitions to 'success'\n\n### 2.5 SMTP Permanent\
+    \ Failure\n\n**Test T-005**: SMTP permanent failure  \n- Simulate permanent SMTP\
+    \ error  \n- Assert:  \n  - delivery_status is 'permanent_failure', retries =\
+    \ 1  \n  - Admin notification triggered  \n\n### 2.6 Incomplete Registration,\
+    \ No Side Effects\n\n**Test T-006**: Incomplete registration (missing fields)\
+    \  \n- Assert:  \n  - No confirmation_emails, no audit created\n\n---\n\n## 3.\
+    \ Implementation Approach\n\n### 3.1 Core Logic\n\n- Upon successful completion\
+    \ of `UserRegistrationService.registerUser(RegisterUserRequest request)`:\n  \
+    \  - Validate all required fields (incl. email format).\n    - If valid:\n   \
+    \     - Generate verification link: `VerificationService.generateLink(UUID userId)`\n\
+    \        - Create `ConfirmationEmail` entity: `new ConfirmationEmail(...)`\n \
+    \       - Queue email send task to `ConfirmationEmailSender.send(for userId)`\n\
+    \    - If registration incomplete or invalid, exit; no email logic executed.\n\
+    \n#### Confirmation Email Sender\n\n- Class: `ConfirmationEmailSender`\n    -\
+    \ Method: `send(UUID userId)`\n        - If `retry_count < 3` AND not permanent\
+    \ failure:\n            - Compose email body (using email + creation time + verification\
+    \ link).\n            - Call `SMTPClient.sendConfirmationEmail(...)`\n       \
+    \     - If send succeeds:\n                - Set `delivery_status = 'success'`,\
+    \ record `email_sent_at`\n                - Create AuditLogEntry (action: 'REGISTRATION_CONFIRMATION_EMAIL_SENT')\n\
+    \            - If send fails (temporary):\n                - Increment `retry_count`,\
+    \ schedule retry in 2 minutes (using background job/cron/task queue)\n       \
+    \         - Set `delivery_status = 'temporary_failure'`\n            - If permanent\
+    \ failure:\n                - Set `delivery_status = 'permanent_failure'`\n  \
+    \              - AuditLogEntry (action: 'REGISTRATION_CONFIRMATION_EMAIL_FAILED')\n\
+    \                - Trigger AdminNotificationService.notifyPersistentFailure(userId,\
+    \ errorMsg)\n        - Retries persist state after each attempt\n\n### 3.2 Inter-service\
+    \ Call Pattern\n\n- SMTP calls are synchronous; retry/offload via job scheduler\
+    \ (e.g. Sidekiq/RQ/retryable background jobs).\n- On permanent failure, `AdminNotificationService.notifyPersistentFailure`\
+    \ is invoked (can be async).\n\n### 3.3 Data Cons"
+  affected_services: []
+  api_changes: []
+gaps: []

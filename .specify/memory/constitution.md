@@ -1,0 +1,4 @@
+- Ensure that all code follows established coding standards and principles in place for the 'User_Management' application.
+- Maintain a high standard of test coverage for all modifications, incorporating both unit and integration tests to verify role adjustments.
+- Prioritize backward compatibility to ensure that changes do not disrupt existing workflows or user permissions suddenly, particularly in heterogeneous active user environments.
+- Regularly update and maintain documentation post-implementation to reflect current accurate system capabilities and agreements.

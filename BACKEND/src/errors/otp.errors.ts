@@ -54,6 +54,32 @@ export class OtpDispatchFailedError extends Error {
 }
 
 // ---------------------------------------------------------------------------
+// Re-request (US-009) errors
+// ---------------------------------------------------------------------------
+
+export class OtpSessionNotFoundError extends Error {
+  public readonly identityHandle: string;
+
+  constructor(identityHandle: string) {
+    super(`No active OTP session was found for '${identityHandle}'.`);
+    this.name = 'OtpSessionNotFoundError';
+    this.identityHandle = identityHandle;
+    Object.setPrototypeOf(this, OtpSessionNotFoundError.prototype);
+  }
+}
+
+export class OtpAccountActivatedError extends Error {
+  public readonly identityHandle: string;
+
+  constructor(identityHandle: string) {
+    super(`OTP re-request is not allowed for an already activated account.`);
+    this.name = 'OtpAccountActivatedError';
+    this.identityHandle = identityHandle;
+    Object.setPrototypeOf(this, OtpAccountActivatedError.prototype);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Verification flow
 // ---------------------------------------------------------------------------
 

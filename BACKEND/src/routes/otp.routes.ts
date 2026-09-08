@@ -2,7 +2,7 @@
  * otp.routes.ts
  *
  * Factory function that wires OtpService dependencies and returns an Express
- * Router with POST /send and POST /resend mounted.
+ * Router with POST /send, POST /resend, and POST /verify mounted.
  * Parent app mounts this at /api/v1/otp.
  *
  * The Redis client and OtpDeliveryPort are accepted as parameters (rather
@@ -11,6 +11,10 @@
  * same reason SendGridEmailAdapter is built once in server.ts rather than
  * per-router. See task 5 for the concrete OtpDeliveryPort implementation and
  * task 7 for full app wiring.
+ *
+ * Two separate rate-limit guards are wired:
+ *  - General guard (5 per 15 min) for sendOtp.
+ *  - Re-request guard (3 per 10 min) for resendOtp (US-009 / S-101).
  */
 
 import { Router } from 'express';
@@ -31,6 +35,7 @@ export function createOtpRouter(db: Database, redis: Redis, otpDeliveryPort: Otp
       new UserRepository(db),
       new OtpRequestRepository(db),
       new RedisRateLimitGuard(redis),
+      new RedisRateLimitGuard(redis, 3, 10), // US-009: 3 per 10 min
       otpDeliveryPort,
       db,
     ),
@@ -39,7 +44,7 @@ export function createOtpRouter(db: Database, redis: Redis, otpDeliveryPort: Otp
   // POST /api/v1/otp/send
   router.post('/send', (req, res) => { void controller.sendOtp(req, res); });
 
-  // POST /api/v1/otp/resend
+  // POST /api/v1/otp/resend (US-009 / S-101)
   router.post('/resend', (req, res) => { void controller.resendOtp(req, res); });
 
   // POST /api/v1/otp/verify

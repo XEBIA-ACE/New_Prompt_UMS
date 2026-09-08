@@ -2,14 +2,15 @@ openspec: '1.0'
 story:
   id: US-033
   title: Notification Upon Account Deletion
-  description: ''
+  description: 'Background worker dispatches a post-deletion notice email to the
+    user''s registered address after their account is confirmed deleted.'
   feature:
     id: F-04
     title: Account Deletion
   epic:
     id: EP-004
     title: Automated Recovery Options Post Account Deletion
-  status: draft
+  status: implemented
 functional_requirement:
   description: "## S-101\n\n### Purpose\n\nThis specification defines how the User\
     \ Management Service MUST notify users when their accounts are deleted, enhancing\
@@ -23,88 +24,140 @@ functional_requirement:
     \ flows.\n9. Non-deletion notification types.\n10. Notification delivery confirmation\
     \ tracking.\n\n### Key Entities\n\n- **UserAccount**: \n  - Attributes: \n   \
     \ - userId (String)\n    - email (String)\n    - deletionDate (DateTime)\n  -\
-    \ Relationships:\n    - n/a\n\n- **Notification**: \n  - Attributes:\n    - message\
-    \ (String)\n    - timestamp (DateTime)\n  - Related Entity:\n    - UserAccount\
-    \ (1:1)\n\n### Functional Requirements\n\n- **FR-001**: User Management Service\
-    \ MUST send a notification to the user's registered email address upon account\
-    \ deletion.\n- **FR-002**: User Management Service MUST include account deletion\
-    \ date in the notification message.\n- **FR-003**: User Management Service SHOULD\
-    \ send notifications within a fixed time after account deletion.\n- **FR-004**:\
-    \ User Management Service MUST NOT send notifications for accounts deleted if\
-    \ there’s no associated email.\n- **FR-005**: User Management Service SHOULD log\
-    \ notification details for auditing purposes.\n- **FR-006**: User Management Service\
-    \ MUST verify existence of an email address before attempting delivery.\n\n###\
-    \ Assumptions Propagation\n\n- **A-001**: Email is the sole method for notification\
-    \ delivery. (Affects FR-001, FR-004)\n- **A-002**: Notifications must be logged\
-    \ for at least 90 days for audit purposes. (Affects FR-005)\n\n### Success Criteria\n\
-    \n- **SC-001**: Notification delivery success rate at least 95%.\n- **SC-002**:\
-    \ Notification sent within 10 minutes of account deletion greater than 90%.\n\
-    - **SC-003**: Logged notifications retained for at least 90 days equals true.\n\
-    \n### Priority Levels\n\n- **FR-001**: P1\n- **FR-002**: P1\n- **FR-003**: P2\n\
-    - **FR-004**: P1\n- **FR-005**: P3\n- **FR-006**: P1\n\n### Edge Cases\n\n- **EC-001**:\
-    \ Given a user account marked for deletion without an email, when the deletion\
-    \ is processed, then no notification should be attempted.\n- **EC-002**: Given\
-    \ a network failure when sending an email notification, when retrying the operation,\
-    \ then the notification should be re-queued and logged.\n\n### Independent Testability\n\
-    \n**Test Scenario**: \n- Preconditions: An account is marked for deletion and\
-    \ has an associated email.\n- User Action: Deletion process is triggered.\n- Observable\
-    \ Outcome: A notification email is dispatched to the user, logged, and the notification\
-    \ contains the correct deletion date/timestamp.\n\n### Context\n\n- **Service**:\
-    \ User Management Service\n- **Story**: Notification Upon Account Deletion\n-\
-    \ **Feature**: Account Deletion\n\nKey words MUST, MUST NOT, SHALL, SHALL NOT,\
-    \ SHOULD, SHOULD NOT, MAY, and OPTIONAL in this document are to be interpreted\
-    \ as described in RFC 2119."
-  acceptance_criteria: []
+    \ Relationships:\n    - n/a\n\n- **DeletionNotificationRecord** (transactional\
+    \ outbox): \n  - Attributes:\n    - recordId (UUID)\n    - userId (String)\n   \
+    \ - recipientAddress (String)\n    - deletionDate (DateTime)\n    - dispatchTimestamp\
+    \ (DateTime)\n    - deliveryStatus ('queued' | 'sent' | 'failed')\n    - retryCount\
+    \ (Integer)\n  - Related Entity:\n    - UserAccount (no FK — user may be anonymized\
+    \ by the time the worker reads the row)\n\n### Functional Requirements\n\n- **FR-001**:\
+    \ User Management Service MUST send a notification to the user's registered email\
+    \ address upon account deletion.\n- **FR-002**: User Management Service MUST\
+    \ include account deletion date in the notification message.\n- **FR-003**: User\
+    \ Management Service SHOULD send notifications within a fixed time after account\
+    \ deletion.\n- **FR-004**: User Management Service MUST NOT send notifications\
+    \ for accounts deleted if there's no associated email.\n- **FR-005**: User Management\
+    \ Service SHOULD log notification details for auditing purposes.\n- **FR-006**:\
+    \ User Management Service MUST verify existence of an email address before attempting\
+    \ delivery.\n\n### Assumptions Propagation\n\n- **A-001**: Email is the sole method\
+    \ for notification delivery. (Affects FR-001, FR-004)\n- **A-002**: Notifications\
+    \ must be logged for at least 90 days for audit purposes. (Affects FR-005)\n\n\
+    ### Success Criteria\n\n- **SC-001**: Notification delivery success rate at least\
+    \ 95%.\n- **SC-002**: Notification sent within 10 minutes of account deletion\
+    \ greater than 90%.\n- **SC-003**: Logged notifications retained for at least\
+    \ 90 days equals true.\n\n### Priority Levels\n\n- **FR-001**: P1\n- **FR-002**:\
+    \ P1\n- **FR-003**: P2\n- **FR-004**: P1\n- **FR-005**: P3\n- **FR-006**: P1\n\n\
+    ### Edge Cases\n\n- **EC-001**: Given a user account marked for deletion without\
+    \ an email, when the deletion is processed, then no notification should be attempted.\n\
+    - **EC-002**: Given a network failure when sending an email notification, when\
+    \ retrying the operation, then the notification should be re-queued and logged.\n\n\
+    ### Independent Testability\n\n**Test Scenario**: \n- Preconditions: An account\
+    \ is marked for deletion and has an associated email.\n- User Action: Deletion\
+    \ process is triggered.\n- Observable Outcome: A notification email is dispatched\
+    \ to the user, logged, and the notification contains the correct deletion date/timestamp.\n\n\
+    ### Context\n\n- **Service**: User Management Service\n- **Story**: Notification\
+    \ Upon Account Deletion\n- **Feature**: Account Deletion\n\nKey words MUST, MUST\
+    \ NOT, SHALL, SHALL NOT, SHOULD, SHOULD NOT, MAY, and OPTIONAL in this document\
+    \ are to be interpreted as described in RFC 2119."
+  acceptance_criteria:
+    - "AC-001: Given a user whose account deletion is confirmed, when the worker
+      processes the queued record, then an email is dispatched to the user's registered
+      address with the deletion date in the message body."
+    - "AC-002: Given a user whose account deletion is confirmed but has no email
+      address, when confirmDeletion() is called, then no notification record is inserted
+      into the outbox table."
+    - "AC-003: Given a queued notification record, when the email provider returns
+      a failure, then the worker increments the retry count and keeps the record in
+      'queued' status until the retry ceiling is reached."
+    - "AC-004: Given a queued notification record, when the worker dispatches the
+      email successfully, then the record's delivery_status transitions to 'sent'."
+    - "AC-005: Given a queued notification record, when the retry count reaches the
+      configured maximum, then the record's delivery_status transitions to 'failed'
+      and a structured error log is emitted."
+    - "AC-006: The notification email subject is 'Your account has been deleted' and
+      the template ID is ACCOUNT_DELETION_NOTICE_EMAIL_TEMPLATE_ID."
   epic_acceptance_criteria: []
 technical_design:
   description: "## S-101\n\nKey words MUST, MUST NOT, SHALL, SHALL NOT, SHOULD, SHOULD\
     \ NOT, MAY, and OPTIONAL in this document are to be interpreted as described in\
-    \ RFC 2119.\n\n### Contracts & Interfaces\n\n#### New Endpoint\n- **POST /api/v1/notifications/account-deleted**\n\
-    \  - **Purpose**: To handle the dispatch of account deletion notifications.\n\
-    \  - **Request Parameters**: \n    - `userId` (String, REQUIRED): Identifier for\
-    \ the user whose account was deleted.\n    - `email` (String, REQUIRED): Email\
-    \ address to send the notification to.\n    - `deletionDate` (DateTime, REQUIRED):\
-    \ Timestamp of when the account was deleted.\n  - **Response**:\n    - **200 OK**:\
-    \ Notification dispatched successfully.\n    - **400 Bad Request**: Validation\
-    \ error, such as missing email.\n    - **500 Internal Server Error**: Unexpected\
-    \ error during processing.\n\n#### Database Schema\n- **Table**: `NotificationsLog`\n\
-    \  - **Columns**:\n    - `logId` (UUID, Primary Key)\n    - `userId` (String,\
-    \ Foreign Key on `UserAccount.userId`)\n    - `timestamp` (DateTime, Index)\n\
-    \    - `status` (String)\n  - **Indexes**:\n    - `idx_timestamp`: On `timestamp`\
-    \ for retrieval within a date range.\n\n### Test Strategy\n\n- **Test Case TC-001**:\
-    \ Verify that the endpoint returns `200 OK` when valid data is provided, confirming\
-    \ FR-001 and FR-002.\n- **Test Case TC-002**: Validate that a notification is\
-    \ not sent and an appropriate error is returned (`400 Bad Request`) when email\
-    \ is missing, confirming FR-004.\n- **Test Case TC-003**: Confirm that notifications\
-    \ sent are logged into `NotificationsLog`, validating FR-005.\n- **Test Case TC-004**:\
-    \ Ensure retry logic is operational on network failure per EC-002, logging failure\
-    \ with corresponding status in `NotificationsLog`.\n\n### Implementation Approach\n\
-    \n#### Core Logic Classes\n- **Class**: `NotificationService`\n  - **Method**:\
-    \ `sendAccountDeletedNotification(UserAccount userAccount)`\n    - **Logic**:\n\
-    \      1. Verify email presence (FR-006).\n      2. Construct notification message\
-    \ containing `deletionDate`.\n      3. Use `EmailService.sendEmail()` to dispatch\
-    \ notification.\n      4. Log success or failure to `NotificationsLog` (A-002).\n\
-    \      5. Returns a status indicating success, retry, or failure.\n\n- **Class**:\
-    \ `EmailService`\n  - **Method**: `sendEmail(String email, String message)`\n\
-    \    - **Logic**:\n      1. Attempt to send the email.\n      2. On failure, queue\
-    \ for retry using a background job processor compliant with EC-002.\n  \n####\
-    \ Inter-Service Calls and Async Patterns\n- **Producer**: NotificationService\
-    \ SHALL act as a producer by queuing failed notifications in `FailedEmailsQueue`.\n\
-    - **Consumer**: A background job, named `EmailRetryWorker`, SHALL consume from\
-    \ `FailedEmailsQueue`, re-attempting email dispatch and updating `NotificationsLog`\
-    \ accordingly.\n\n#### Architectural Decision Records (ADRs)\n\n- **ADR-001: Email\
-    \ Notification Handling Using In-House Service**\n  - **Context**: Need to dispatch\
-    \ user notifications via email upon account deletion.\n  - **Decision**: Use an\
-    \ in-house `EmailService` for sending notifications.\n  - **Rationale**: Ensures\
-    \ control over data privacy and auditing; aligns with A-001.\n  - **Alternative**:\
-    \ Third-party email service (rejected due to dependency and compliance risks).\n\
-    \n#### Simplicity Gate Assessment\n- **Rating**: `appropriate`\n  - Each data\
-    \ element and service function directly maps to at least one functional requirement\
-    \ (FR-001 to FR-006), ensuring no unnecessary complexity.\n\n### Affected Services\
-    \ and API Changes\n\n- **Affected Service**: User Management Service\n- **Changes**:\n\
-    \  - Introduction of `/api/v1/notifications/account-deleted` endpoint.\n  - Back-end\
-    \ modifications involving `NotificationsLog` table creation and notification queuing\
-    \ processes."
-  affected_services: []
-  api_changes: []
+    \ RFC 2119.\n\n### Contracts & Interfaces\n\nNo standalone REST endpoint is exposed\
+    \ for notification dispatch. Instead, the notification is triggered as a side-effect\
+    \ of the existing **POST /api/v1/users/deletion-requests/confirm** route (behind\
+    \ SessionValidationMiddleware). On successful OTP verification, `DefaultAccountDeletionService.confirmDeletion()`\
+    \ inserts a `queued` row into `account_deletion_notification_records` inside the\
+    \ same database transaction that anonymizes the user and marks the request confirmed.\n\
+    \n#### Database Schema\n- **Table**: `account_deletion_notification_records`\n\
+    \  - **Columns**:\n    - `record_id` (TEXT, UUID, Primary Key)\n    - `user_id`\
+    \ (TEXT, no FK — user may be anonymized)\n    - `recipient_address` (TEXT, NOT\
+    \ NULL)\n    - `deletion_date` (TEXT, ISO-8601 DateTime)\n    - `dispatch_timestamp`\
+    \ (TEXT, ISO-8601 DateTime)\n    - `delivery_status` (TEXT, CHECK IN ('queued',\
+    \ 'sent', 'failed'), default 'queued')\n    - `retry_count` (INTEGER, default 0)\n\
+    \  - **Indexes**:\n    - `idx_deletion_notification_status`: On `delivery_status`\
+    \ for polling queued records.\n\n### Test Strategy\n\n- **Test Case TC-001**: Worker\n\
+    `processQueuedRecords()` transitions a successfully dispatched record to 'sent'.\n\
+    - **Test Case TC-002**: Worker increments `retry_count` when `sendTransactional`\
+    \ returns `{ success: false }` below the retry ceiling.\n- **Test Case TC-003**:\
+    \ Worker transitions to 'failed' and emits `console.error` when `retry_count >=\
+    \ maxRetries`.\n- **Test Case TC-004**: Worker treats a thrown exception the same\
+    \ as a failure result.\n- **Test Case TC-005**: Integration test confirms the full\
+    \ flow — register, activate, login, request deletion, confirm with OTP — results\
+    \ in a queued notification record that the worker dispatches.\n- **Test Case TC-006**:\
+    \ Integration test confirms session invalidation on deletion and that login with\
+    \ anonymized credentials fails.\n\n### Implementation Approach\n\n#### Core Logic\
+    Classes\n- **Class**: `DefaultAccountDeletionService` (in `account-deletion.service.ts`)\n\
+    \  - **Method**: `confirmDeletion(userId, code)`\n    - **Logic**:\n      1. Verify\
+    \ OTP (existing logic).\n      2. Capture the user's email BEFORE anonymizing.\n\
+    \      3. Within a `withTransaction` callback: anonymize user, mark request confirmed,\
+    \ invalidate sessions, **insert a queued notification record** with the captured\
+    \ email and deletion date.\n\n- **Class**: `AccountDeletionNotificationWorker` (in\
+    \ `account-deletion-notification.worker.ts`)\n  - **Method**: `processQueuedRecords()`\n\
+    \    - **Logic**:\n      1. Query `account_deletion_notification_records` WHERE\
+    \ `delivery_status = 'queued'` ORDER BY `dispatch_timestamp ASC`.\n      2. For\
+    \ each record, call `EmailDeliveryPort.sendTransactional()` with subject 'Your\
+    \ account has been deleted' and template vars `{ deletionDate: record.deletionDate.toISOString() }`.\n\
+    \      3. On success → `updateStatus(recordId, 'sent')`.\n      4. On failure →\
+    \ `_handleFailure()`: if `retryCount < maxRetries` then `incrementRetryCount()`,\
+    \ else `updateStatus(recordId, 'failed')` + structured log.\n  - **Method**: `start(intervalMs)`\n\
+    \    - Sets up a polling interval (default `appConfig.outboxPollIntervalMs = 30_000`ms).\n\
+    \  - **Method**: `stop()`\n    - Clears the interval for clean shutdown.\n\n####\
+    \ Repository\n- **Class**: `DeletionNotificationRecordRepository` (in `deletion-notification-record.repository.ts`)\n\
+    \  - `insert(userId, recipientAddress, deletionDate)` → inserts queued record.\n\
+    \  - `findByStatus(status)` → returns matching records ordered by dispatch_timestamp.\n\
+    \  - `updateStatus(recordId, status)` → transitions status.\n  - `incrementRetryCount(recordId)`\
+    \ → atomic `retry_count = retry_count + 1`.\n\n#### Inter-Service Calls and Async\
+    Patterns\n- **Producer**: `DefaultAccountDeletionService.confirmDeletion()` inserts\
+    \ a queued record inside the same transaction as the anonymization writes.\n-\
+    \ **Consumer**: `AccountDeletionNotificationWorker` polls the `account_deletion_notification_records`\
+    \ table (not a separate queue) and dispatches via `EmailDeliveryPort`.\n- **Retry**:\n\
+    \  - Uses the same `appConfig.outboxMaxRetries` (default 1) and polling interval\
+    \ as `OutboxWorker` (F-01). No new tunables.\n\n#### Architectural Decision Records\
+    \ (ADRs)\n\n- **ADR-001: Email Notification Handling Using In-House Service**\n\
+    \  - **Context**: Need to dispatch user notifications via email upon account deletion.\n\
+    \  - **Decision**: Use an in-house `EmailService` (via `EmailDeliveryPort` / `SendGridEmailAdapter`)\
+    \ for sending notifications.\n  - **Rationale**: Ensures control over data privacy\
+    \ and auditing; aligns with A-001.\n  - **Alternative**: Third-party email service\
+    \ (rejected due to dependency and compliance risks).\n\n- **ADR-002: Transactional\
+    \ Outbox for Post-Deletion Notifications**\n  - **Context**: Notification dispatch\
+    \ must survive service restarts and must be atomic with account anonymization.\n\
+    \  - **Decision**: Use the `account_deletion_notification_records` table as a\
+    \ transactional outbox, polled by `AccountDeletionNotificationWorker`.\n  - **Rationale**:\
+    \ Mirrors the existing `registration_email_records` / `OutboxWorker` pattern (F-01),\
+    \ avoids a separate queue infrastructure, and ensures the notification record\
+    \ commits atomically with the anonymization writes.\n  - **Alternative**: Direct\
+    \ synchronous email send within `confirmDeletion()` (rejected: would block the\
+    \ HTTP response and fail silently on provider errors).\n\n#### Simplicity Gate\
+    Assessment\n- **Rating**: `appropriate`\n  - Each data element and service function\
+    \ directly maps to at least one functional requirement (FR-001 to FR-006), ensuring\
+    \ no unnecessary complexity.\n\n### Affected Services and API Changes\n\n- **Affected\
+    \ Service**: User Management Service\n- **Changes**:\n  - No new HTTP endpoint.\n\
+    \  - `DefaultAccountDeletionService.confirmDeletion()` inserts a queued notification\
+    \ record as part of its transaction.\n  - `AccountDeletionNotificationWorker` polls\
+    \ and dispatches.\n  - Migration 008 creates the `account_deletion_notification_records`\
+    \ table.\n  - `server.ts` wires up `DeletionNotificationRecordRepository` and the\
+    \ worker, starts it on boot, and stops it on shutdown."
+  affected_services:
+    - id: S-101
+      name: User Management Service
+  api_changes:
+    - "No new HTTP endpoint. Notification dispatch is an async side-effect of the
+      existing POST /api/v1/users/deletion-requests/confirm route."
 gaps: []

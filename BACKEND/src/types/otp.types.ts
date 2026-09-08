@@ -45,6 +45,8 @@ export interface OtpRequestEntity {
   expiresAt: Date;
   invalidatedAt: Date | null;
   attemptSequence: number;
+  /** Number of failed verification attempts for this OTP record. */
+  attemptCount: number;
 }
 
 // ---------------------------------------------------------------------------

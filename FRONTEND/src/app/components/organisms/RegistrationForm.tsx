@@ -6,14 +6,19 @@ import { PasswordStrengthBar, getStrength } from "../molecules/PasswordStrengthB
 import { registerUser } from "../../lib/api-client";
 
 /* ── Validation helpers ───────────────────────────────── */
+
+/**
+ * E.164-derived phone pattern: "+CountryCode-Number".
+ * Starts with "+", followed by 1-3 digit country code, a dash, then 1-14 digits.
+ * Implements FR-005 (P3).
+ */
+const PHONE_PATTERN = /^\+[1-9]\d{1,14}$/;
+
 const validate = {
-  name: (v: string) => {
-    if (!v.trim()) return "Full name is required.";
-    if (v.trim().length < 2) return "Name must be at least 2 characters.";
-    return "";
-  },
   username: (v: string) => {
     if (!v.trim()) return "Username is required.";
+    if (!/^[a-zA-Z0-9]+$/.test(v)) return "Username must be alphanumeric.";
+    if (v.length > 20) return "Username must be 20 characters or fewer.";
     return "";
   },
   email: (v: string) => {
@@ -26,14 +31,26 @@ const validate = {
     if (v.length < 8) return "Password must be at least 8 characters.";
     return "";
   },
+  passwordConfirm: (v: string, password: string) => {
+    if (!v) return "Please confirm your password.";
+    if (v !== password) return "Passwords do not match.";
+    return "";
+  },
+  phone: (v: string) => {
+    if (!v.trim()) return "Phone number is required.";
+    if (!PHONE_PATTERN.test(v))
+      return "Phone must be in +CountryCode-Number format (e.g. +1-5551234567).";
+    return "";
+  },
 };
 
 /* ── Server field name → local field key ──────────────── */
-const SERVER_FIELD_MAP: Record<string, "username" | "email" | "password" | "passwordConfirm"> = {
+const SERVER_FIELD_MAP: Record<string, "username" | "email" | "password" | "passwordConfirm" | "phone"> = {
   username: "username",
   emailAddress: "email",
   password: "password",
   passwordConfirmation: "passwordConfirm",
+  phone: "phone",
 };
 
 /* ── Password input with show/hide toggle ─────────────── */
@@ -143,32 +160,53 @@ function SuccessBanner({ email }: { email: string }) {
 export function RegistrationForm() {
   const navigate = useNavigate();
 
-  const [fields, setFields] = useState({ name: "", username: "", email: "", password: "", passwordConfirm: "" });
-  const [errors, setErrors] = useState({ name: "", username: "", email: "", password: "", passwordConfirm: "" });
-  const [touched, setTouched] = useState({ name: false, username: false, email: false, password: false, passwordConfirm: false });
+  const [fields, setFields] = useState({
+    username: "",
+    email: "",
+    password: "",
+    passwordConfirm: "",
+    phone: "",
+  });
+  const [errors, setErrors] = useState({
+    username: "",
+    email: "",
+    password: "",
+    passwordConfirm: "",
+    phone: "",
+  });
+  const [touched, setTouched] = useState({
+    username: false,
+    email: false,
+    password: false,
+    passwordConfirm: false,
+    phone: false,
+  });
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState("");
-
-  const clientValidate: Record<keyof typeof fields, (v: string) => string> = {
-    ...validate,
-    passwordConfirm: (v: string) => {
-      if (!v) return "Please confirm your password.";
-      if (v !== fields.password) return "Passwords do not match.";
-      return "";
-    },
-  };
 
   const setField = (key: keyof typeof fields) => (v: string) => {
     setFields((prev) => ({ ...prev, [key]: v }));
     if (formError) setFormError("");
     if (touched[key]) {
-      setErrors((prev) => ({ ...prev, [key]: clientValidate[key](v) }));
+      setErrors((prev) => ({
+        ...prev,
+        [key]:
+          key === "passwordConfirm"
+            ? validate.passwordConfirm(v, fields.password)
+            : (validate as Record<string, (v: string) => string>)[key](v),
+      }));
     }
   };
 
   const handleBlur = (key: keyof typeof fields) => () => {
     setTouched((prev) => ({ ...prev, [key]: true }));
-    setErrors((prev) => ({ ...prev, [key]: clientValidate[key](fields[key]) }));
+    setErrors((prev) => ({
+      ...prev,
+      [key]:
+        key === "passwordConfirm"
+          ? validate.passwordConfirm(fields.passwordConfirm, fields.password)
+          : (validate as Record<string, (v: string) => string>)[key](fields[key]),
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -176,14 +214,20 @@ export function RegistrationForm() {
 
     /* validate all fields */
     const nextErrors = {
-      name: validate.name(fields.name),
       username: validate.username(fields.username),
       email: validate.email(fields.email),
       password: validate.password(fields.password),
-      passwordConfirm: clientValidate.passwordConfirm(fields.passwordConfirm),
+      passwordConfirm: validate.passwordConfirm(fields.passwordConfirm, fields.password),
+      phone: validate.phone(fields.phone),
     };
     setErrors(nextErrors);
-    setTouched({ name: true, username: true, email: true, password: true, passwordConfirm: true });
+    setTouched({
+      username: true,
+      email: true,
+      password: true,
+      passwordConfirm: true,
+      phone: true,
+    });
     setFormError("");
 
     const hasErrors = Object.values(nextErrors).some(Boolean);
@@ -196,12 +240,13 @@ export function RegistrationForm() {
         emailAddress: fields.email,
         password: fields.password,
         passwordConfirmation: fields.passwordConfirm,
+        phone: fields.phone || undefined,
       });
 
       if (result.ok) {
         /* Navigate to OTP screen, passing the email + userId via router state */
         navigate("/verify-otp", {
-          state: { email: fields.email, name: fields.name, userId: result.data.userId },
+          state: { email: fields.email, userId: result.data.userId },
         });
         return;
       }
@@ -243,11 +288,11 @@ export function RegistrationForm() {
 
   const strengthScore = getStrength(fields.password).level;
   const isFormValid =
-    !validate.name(fields.name) &&
     !validate.username(fields.username) &&
     !validate.email(fields.email) &&
     !validate.password(fields.password) &&
-    !clientValidate.passwordConfirm(fields.passwordConfirm) &&
+    !validate.passwordConfirm(fields.passwordConfirm, fields.password) &&
+    !validate.phone(fields.phone) &&
     strengthScore >= 1;
 
   return (
@@ -261,157 +306,158 @@ export function RegistrationForm() {
       }}
     >
       <>
-          {/* H1 page title */}
-          <h1 className="mb-2" style={{ color: "#212121" }}>
-            Create Your Account
-          </h1>
-          <p className="mb-8" style={{ color: "#9E9E9E", fontSize: "14px", lineHeight: "20px" }}>
-            Join AuthFlow today — free forever, no credit card needed.
-          </p>
+        {/* H1 page title */}
+        <h1 className="mb-2" style={{ color: "#212121" }}>
+          Create Your Account
+        </h1>
+        <p className="mb-8" style={{ color: "#9E9E9E", fontSize: "14px", lineHeight: "20px" }}>
+          Join AuthFlow today — free forever, no credit card needed.
+        </p>
 
-          <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
-            {/* Form-level error banner */}
-            {formError && <AuthErrorBanner message={formError} />}
+        <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
+          {/* Form-level error banner */}
+          {formError && <AuthErrorBanner message={formError} />}
 
-            {/* Full Name */}
+          {/* Username */}
+          <FormField
+            id="reg-username"
+            label="Username"
+            type="text"
+            placeholder="janesmith"
+            value={fields.username}
+            onChange={setField("username")}
+            onBlur={handleBlur("username")}
+            error={touched.username ? errors.username : ""}
+            autoComplete="username"
+          />
+
+          {/* Email Address */}
+          <FormField
+            id="reg-email"
+            label="Email Address"
+            type="email"
+            placeholder="you@example.com"
+            value={fields.email}
+            onChange={setField("email")}
+            onBlur={handleBlur("email")}
+            error={touched.email ? errors.email : ""}
+            autoComplete="email"
+          />
+
+          {/* Phone Number */}
+          <FormField
+            id="reg-phone"
+            label="Phone Number"
+            type="tel"
+            placeholder="+1-5551234567"
+            value={fields.phone}
+            onChange={setField("phone")}
+            onBlur={handleBlur("phone")}
+            error={touched.phone ? errors.phone : ""}
+            autoComplete="tel"
+            hint="Format: +CountryCode-Number (e.g. +1-5551234567)"
+          />
+
+          {/* Password */}
+          <div className="flex flex-col gap-0">
             <FormField
-              id="reg-name"
-              label="Full Name"
-              type="text"
-              placeholder="Jane Smith"
-              value={fields.name}
-              onChange={setField("name")}
-              onBlur={handleBlur("name")}
-              error={touched.name ? errors.name : ""}
-              autoComplete="name"
-            />
-
-            {/* Username */}
-            <FormField
-              id="reg-username"
-              label="Username"
-              type="text"
-              placeholder="janesmith"
-              value={fields.username}
-              onChange={setField("username")}
-              onBlur={handleBlur("username")}
-              error={touched.username ? errors.username : ""}
-              autoComplete="username"
-            />
-
-            {/* Email Address */}
-            <FormField
-              id="reg-email"
-              label="Email Address"
-              type="email"
-              placeholder="you@example.com"
-              value={fields.email}
-              onChange={setField("email")}
-              onBlur={handleBlur("email")}
-              error={touched.email ? errors.email : ""}
-              autoComplete="email"
-            />
-
-            {/* Password */}
-            <div className="flex flex-col gap-0">
-              <FormField
+              id="reg-password"
+              label="Password"
+              value={fields.password}
+              onChange={setField("password")}
+              onBlur={handleBlur("password")}
+              error={touched.password ? errors.password : ""}
+            >
+              <PasswordInput
                 id="reg-password"
-                label="Password"
                 value={fields.password}
                 onChange={setField("password")}
                 onBlur={handleBlur("password")}
-                error={touched.password ? errors.password : ""}
-              >
-                <PasswordInput
-                  id="reg-password"
-                  value={fields.password}
-                  onChange={setField("password")}
-                  onBlur={handleBlur("password")}
-                  hasError={Boolean(touched.password && errors.password)}
-                />
-              </FormField>
-
-              {/* Password strength bar */}
-              <div id="reg-password-strength">
-                <PasswordStrengthBar password={fields.password} />
-              </div>
-            </div>
-
-            {/* Confirm Password */}
-            <FormField
-              id="reg-password-confirm"
-              label="Confirm Password"
-              value={fields.passwordConfirm}
-              onChange={setField("passwordConfirm")}
-              onBlur={handleBlur("passwordConfirm")}
-              error={touched.passwordConfirm ? errors.passwordConfirm : ""}
-            >
-              <PasswordInput
-                id="reg-password-confirm"
-                value={fields.passwordConfirm}
-                onChange={setField("passwordConfirm")}
-                onBlur={handleBlur("passwordConfirm")}
-                hasError={Boolean(touched.passwordConfirm && errors.passwordConfirm)}
+                hasError={Boolean(touched.password && errors.password)}
               />
             </FormField>
 
-            {/* Register button — primary, full-width */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full h-12 flex items-center justify-center gap-2 rounded-md text-sm font-semibold text-white transition-colors duration-150 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[rgba(26,115,232,0.4)] group mt-1 disabled:cursor-not-allowed"
-              style={{
-                backgroundColor: loading ? "#9E9E9E" : "#1A73E8",
-                boxShadow: loading ? "none" : "0px 2px 4px rgba(0,0,0,0.1)",
-                letterSpacing: "0.5px",
-              }}
-              onMouseEnter={(e) => {
-                if (!loading) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#1557B0";
-              }}
-              onMouseLeave={(e) => {
-                if (!loading) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#1A73E8";
-              }}
-              aria-label={loading ? "Creating your account…" : "Register"}
-            >
-              {loading ? (
-                <>
-                  <svg
-                    className="animate-spin"
-                    width={16}
-                    height={16}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    aria-hidden="true"
-                  >
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z" />
-                  </svg>
-                  Creating account…
-                </>
-              ) : (
-                <>
-                  Register
-                  <ArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-                </>
-              )}
-            </button>
+            {/* Password strength bar */}
+            <div id="reg-password-strength">
+              <PasswordStrengthBar password={fields.password} />
+            </div>
+          </div>
 
-            {/* Secondary link — "Already have an account? Sign In" */}
-            <p
-              className="text-center"
-              style={{ color: "#9E9E9E", fontSize: "14px", lineHeight: "20px" }}
+          {/* Confirm Password */}
+          <FormField
+            id="reg-password-confirm"
+            label="Confirm Password"
+            value={fields.passwordConfirm}
+            onChange={setField("passwordConfirm")}
+            onBlur={handleBlur("passwordConfirm")}
+            error={touched.passwordConfirm ? errors.passwordConfirm : ""}
+          >
+            <PasswordInput
+              id="reg-password-confirm"
+              value={fields.passwordConfirm}
+              onChange={setField("passwordConfirm")}
+              onBlur={handleBlur("passwordConfirm")}
+              hasError={Boolean(touched.passwordConfirm && errors.passwordConfirm)}
+            />
+          </FormField>
+
+          {/* Register button — primary, full-width */}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full h-12 flex items-center justify-center gap-2 rounded-md text-sm font-semibold text-white transition-colors duration-150 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[rgba(26,115,232,0.4)] group mt-1 disabled:cursor-not-allowed"
+            style={{
+              backgroundColor: loading ? "#9E9E9E" : "#1A73E8",
+              boxShadow: loading ? "none" : "0px 2px 4px rgba(0,0,0,0.1)",
+              letterSpacing: "0.5px",
+            }}
+            onMouseEnter={(e) => {
+              if (!loading) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#1557B0";
+            }}
+            onMouseLeave={(e) => {
+              if (!loading) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#1A73E8";
+            }}
+            aria-label={loading ? "Creating your account…" : "Register"}
+          >
+            {loading ? (
+              <>
+                <svg
+                  className="animate-spin"
+                  width={16}
+                  height={16}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z" />
+                </svg>
+                Creating account…
+              </>
+            ) : (
+              <>
+                Register
+                <ArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+              </>
+            )}
+          </button>
+
+          {/* Secondary link — "Already have an account? Sign In" */}
+          <p
+            className="text-center"
+            style={{ color: "#9E9E9E", fontSize: "14px", lineHeight: "20px" }}
+          >
+            Already have an account?{" "}
+            <button
+              type="button"
+              onClick={() => navigate("/login")}
+              className="font-medium hover:underline underline-offset-2 transition-colors"
+              style={{ color: "#1A73E8", fontSize: "14px" }}
             >
-              Already have an account?{" "}
-              <button
-                type="button"
-                onClick={() => navigate("/")}
-                className="font-medium hover:underline underline-offset-2 transition-colors"
-                style={{ color: "#1A73E8", fontSize: "14px" }}
-              >
-                Sign In
-              </button>
-            </p>
-          </form>
+              Sign In
+            </button>
+          </p>
+        </form>
       </>
     </div>
   );

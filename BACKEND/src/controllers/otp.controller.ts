@@ -19,7 +19,9 @@
  *   success                     -> 200 { message, userId, activatedAt }
  *   OtpNotFoundError            -> 404 OTP_NOT_FOUND
  *   OtpExpiredError             -> 410 OTP_EXPIRED
+ *   OtpLockedError              -> 409 OTP_LOCKED
  *   OtpInvalidError             -> 422 OTP_INVALID
+ *   OtpForbiddenError (locked/deleted user) -> 422 ACCOUNT_STATE_INVALID
  *   malformed body              -> 400
  *   unexpected                  -> 500
  *
@@ -36,6 +38,7 @@ import {
   OtpNotFoundError,
   OtpExpiredError,
   OtpInvalidError,
+  OtpLockedError,
 } from '../errors/otp.errors';
 
 export class OtpController {
@@ -90,8 +93,19 @@ export class OtpController {
         return;
       }
 
+      if (err instanceof OtpLockedError) {
+        res.status(409).json({ errorCode: 'OTP_LOCKED', message: err.message });
+        return;
+      }
+
       if (err instanceof OtpInvalidError) {
         res.status(422).json({ errorCode: 'OTP_INVALID', message: err.message });
+        return;
+      }
+
+      if (err instanceof OtpForbiddenError) {
+        // FR-012: locked or deleted user account — reuse 422 per the API contract.
+        res.status(422).json({ errorCode: 'ACCOUNT_STATE_INVALID', message: err.message });
         return;
       }
 

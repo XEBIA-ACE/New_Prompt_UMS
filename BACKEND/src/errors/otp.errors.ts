@@ -89,3 +89,18 @@ export class OtpInvalidError extends Error {
     Object.setPrototypeOf(this, OtpInvalidError.prototype);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Locked / exceeded attempts
+// ---------------------------------------------------------------------------
+
+export class OtpLockedError extends Error {
+  public readonly userId: string;
+
+  constructor(userId: string) {
+    super(`The OTP for user '${userId}' has been locked after too many failed attempts.`);
+    this.name = 'OtpLockedError';
+    this.userId = userId;
+    Object.setPrototypeOf(this, OtpLockedError.prototype);
+  }
+}

@@ -13,6 +13,7 @@ import {
   OtpNotFoundError,
   OtpExpiredError,
   OtpInvalidError,
+  OtpLockedError,
 } from '../errors/otp.errors';
 import { UserEntity } from '../types/registration.types';
 import { OtpRequestEntity } from '../types/otp.types';
@@ -33,6 +34,7 @@ function buildOtpRequest(overrides: Partial<OtpRequestEntity> = {}): OtpRequestE
     expiresAt: new Date(createdAt.getTime() + otpConfig.otpTtlMinutes * 60 * 1000),
     invalidatedAt: null,
     attemptSequence: 1,
+    attemptCount: 0,
     ...overrides,
   };
 }
@@ -95,6 +97,8 @@ describe('DefaultOtpService', () => {
       markFailed: jest.fn(),
       findById: jest.fn(),
       getNextAttemptSequence: jest.fn().mockResolvedValue(1),
+      incrementAttemptCount: jest.fn(),
+      invalidateById: jest.fn(),
     };
     rateLimitGuard = { allow: jest.fn().mockResolvedValue(true) };
     otpDeliveryPort = { dispatch: jest.fn().mockResolvedValue(true) };
@@ -259,6 +263,64 @@ describe('DefaultOtpService', () => {
 
       await expect(service.verifyOtp('user-1', '000000')).rejects.toBeInstanceOf(OtpInvalidError);
       expect(mockDb.transaction).not.toHaveBeenCalled();
+    });
+
+    test('increments attempt_count on a wrong passcode (FR-007)', async () => {
+      userRepository.findById.mockResolvedValue(buildUser({ status: 'pending' }));
+      otpRequestRepository.findActiveByUserId.mockResolvedValue(buildOtpRequest({ attemptCount: 2 }));
+
+      await expect(service.verifyOtp('user-1', '000000')).rejects.toBeInstanceOf(OtpInvalidError);
+
+      expect(otpRequestRepository.incrementAttemptCount).toHaveBeenCalledWith('otp-1');
+      expect(otpRequestRepository.invalidateById).not.toHaveBeenCalled();
+    });
+
+    test('invalidates OTP when attempt_count reaches max (FR-008)', async () => {
+      userRepository.findById.mockResolvedValue(buildUser({ status: 'pending' }));
+      otpRequestRepository.findActiveByUserId.mockResolvedValue(
+        buildOtpRequest({ attemptCount: otpConfig.otpMaxAttemptsPerWindow - 1 }),
+      );
+
+      await expect(service.verifyOtp('user-1', '000000')).rejects.toBeInstanceOf(OtpInvalidError);
+
+      expect(otpRequestRepository.incrementAttemptCount).toHaveBeenCalledWith('otp-1');
+      expect(otpRequestRepository.invalidateById).toHaveBeenCalledWith('otp-1');
+    });
+
+    test('does not invalidate OTP when attempt_count is below max (FR-008)', async () => {
+      userRepository.findById.mockResolvedValue(buildUser({ status: 'pending' }));
+      otpRequestRepository.findActiveByUserId.mockResolvedValue(
+        buildOtpRequest({ attemptCount: 1 }),
+      );
+
+      await expect(service.verifyOtp('user-1', '000000')).rejects.toBeInstanceOf(OtpInvalidError);
+
+      expect(otpRequestRepository.incrementAttemptCount).toHaveBeenCalledWith('otp-1');
+      expect(otpRequestRepository.invalidateById).not.toHaveBeenCalled();
+    });
+
+    test('throws OtpLockedError when OTP is invalidated (FR-009)', async () => {
+      userRepository.findById.mockResolvedValue(buildUser({ status: 'pending' }));
+      otpRequestRepository.findActiveByUserId.mockResolvedValue(
+        buildOtpRequest({ invalidatedAt: new Date(), attemptCount: 5 }),
+      );
+
+      await expect(service.verifyOtp('user-1', '654321')).rejects.toBeInstanceOf(OtpLockedError);
+      expect(otpRequestRepository.incrementAttemptCount).not.toHaveBeenCalled();
+    });
+
+    test('throws OtpForbiddenError when user account is suspended (FR-012)', async () => {
+      userRepository.findById.mockResolvedValue(buildUser({ status: 'suspended' }));
+
+      await expect(service.verifyOtp('user-1', '654321')).rejects.toBeInstanceOf(OtpForbiddenError);
+      expect(otpRequestRepository.findActiveByUserId).not.toHaveBeenCalled();
+    });
+
+    test('throws OtpForbiddenError when user account is deleted (FR-012)', async () => {
+      userRepository.findById.mockResolvedValue(buildUser({ status: 'deleted' }));
+
+      await expect(service.verifyOtp('user-1', '654321')).rejects.toBeInstanceOf(OtpForbiddenError);
+      expect(otpRequestRepository.findActiveByUserId).not.toHaveBeenCalled();
     });
   });
 });

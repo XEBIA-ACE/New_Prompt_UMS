@@ -4,7 +4,7 @@
  * Repository for the `otp_requests` table.  All queries use parameterised
  * `?` placeholders — no string interpolation.
  *
- * Requirements: US-002 FR-003, FR-006, FR-009
+ * Requirements: US-002 FR-003, FR-006, FR-009; US-005 FR-007, FR-008, FR-009
  */
 
 import type { Database } from 'better-sqlite3';
@@ -23,6 +23,10 @@ export interface IOtpRequestRepository {
   markFailed(id: string): Promise<void>;
   findById(id: string): Promise<OtpRequestEntity | null>;
   getNextAttemptSequence(userId: string): Promise<number>;
+  /** Increment attempt_count by 1 for the given OTP record. (FR-007) */
+  incrementAttemptCount(id: string): Promise<void>;
+  /** Mark an OTP record as invalidated (FR-008). */
+  invalidateById(id: string): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -39,6 +43,7 @@ interface OtpRequestRow {
   expires_at: string;
   invalidated_at: string | null;
   attempt_sequence: number;
+  attempt_count: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -56,6 +61,7 @@ function rowToEntity(row: OtpRequestRow): OtpRequestEntity {
     expiresAt: new Date(row.expires_at),
     invalidatedAt: row.invalidated_at === null ? null : new Date(row.invalidated_at),
     attemptSequence: row.attempt_sequence,
+    attemptCount: row.attempt_count,
   };
 }
 
@@ -154,5 +160,26 @@ export class OtpRequestRepository implements IOtpRequestRepository {
       .get(userId) as { next_sequence: number };
 
     return row.next_sequence;
+  }
+
+  /**
+   * Increment attempt_count by 1 for the given OTP record.
+   * Called by OtpService.verifyOtp() on every failed passcode attempt (FR-007).
+   */
+  async incrementAttemptCount(id: string): Promise<void> {
+    this.db
+      .prepare('UPDATE otp_requests SET attempt_count = attempt_count + 1 WHERE id = ?')
+      .run(id);
+  }
+
+  /**
+   * Mark an OTP record as invalidated.
+   * Called by OtpService.verifyOtp() when the attempt count reaches the
+   * system-defined maximum threshold (FR-008).
+   */
+  async invalidateById(id: string): Promise<void> {
+    this.db
+      .prepare('UPDATE otp_requests SET invalidated_at = ? WHERE id = ?')
+      .run(new Date().toISOString(), id);
   }
 }

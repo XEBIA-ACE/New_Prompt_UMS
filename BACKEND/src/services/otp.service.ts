@@ -16,7 +16,20 @@
  *      provider outcome, but always report `accepted: true` to the caller —
  *      dispatch failure is tracked for observability, not surfaced as an error.
  *
+ * verifyOtp rules (US-005):
+ *   1. Load user by id — unknown, locked, or deleted user -> OtpNotFoundError (FR-012).
+ *   2. Load the active (non-invalidated) OTP request for the user.
+ *      No pending OTP -> OtpNotFoundError (FR-006).
+ *   3. Check expiry — past expiresAt -> OtpExpiredError (FR-005).
+ *   4. Check account status — locked/deleted user -> OtpForbiddenError (FR-012).
+ *   5. Check OTP status — invalidated -> OtpLockedError (FR-009).
+ *   6. Timing-safe passcode comparison (FR-004).
+ *   7. On mismatch: increment attempt_count (FR-007).
+ *      If attempt_count >= OTP_MAX_ATTEMPTS -> invalidate OTP (FR-008).
+ *   8. On match: mark OTP verified, activate user account (FR-010, FR-011).
+ *
  * Requirements: US-002 FR-002, FR-003, FR-004, FR-005, FR-006, FR-009, FR-010
+ *               US-005 FR-001–012
  */
 
 import crypto from 'crypto';
@@ -33,6 +46,7 @@ import {
   OtpNotFoundError,
   OtpExpiredError,
   OtpInvalidError,
+  OtpLockedError,
 } from '../errors/otp.errors';
 import { otpConfig } from '../config/otp.config';
 
@@ -102,12 +116,22 @@ export class DefaultOtpService implements OtpService {
    *
    * @throws OtpNotFoundError - no active (non-invalidated) OTP exists for the user.
    * @throws OtpExpiredError  - the active OTP's expiry has passed.
+   * @throws OtpLockedError   - the OTP has been invalidated from too many failed attempts.
    * @throws OtpInvalidError  - the submitted code does not match.
+   * @throws OtpForbiddenError - the user account is in a locked or deleted state.
    */
   async verifyOtp(userId: string, passcode: string): Promise<OtpVerifyResult> {
+    // FR-012: Reject locked/deleted user accounts regardless of OTP validity.
     const user = await this.userRepository.findById(userId);
-    if (user === null || (user.status !== 'pending' && user.status !== 'active')) {
+    if (user === null) {
       throw new OtpNotFoundError(userId);
+    }
+
+    // The spec calls this "locked or deleted" but the actual UserEntity
+    // status enum is 'pending' | 'active' | 'suspended' | 'deleted'.
+    // Check for the statuses that represent inactive accounts.
+    if (user.status === 'suspended' || user.status === 'deleted') {
+      throw new OtpForbiddenError(userId, user.status);
     }
 
     const request = await this.otpRequestRepository.findActiveByUserId(userId);
@@ -115,8 +139,15 @@ export class DefaultOtpService implements OtpService {
       throw new OtpNotFoundError(userId);
     }
 
+    // FR-005: Reject expired OTPs regardless of passcode correctness.
     if (new Date() > request.expiresAt) {
       throw new OtpExpiredError(userId);
+    }
+
+    // FR-009: Reject verification when the OTP has been invalidated
+    // due to excessive failed attempts.
+    if (request.invalidatedAt !== null) {
+      throw new OtpLockedError(userId);
     }
 
     const submittedHash = Buffer.from(hashOtpCode(passcode));
@@ -126,9 +157,22 @@ export class DefaultOtpService implements OtpService {
       crypto.timingSafeEqual(submittedHash, storedHash);
 
     if (!matches) {
+      // FR-007: Increment the attempt count on every failed passcode match.
+      await this.otpRequestRepository.incrementAttemptCount(request.id);
+
+      // FR-008: Invalidate the OTP when the attempt count reaches the max.
+      // request.attemptCount is the pre-increment value from the DB;
+      // the SQL sets attempt_count = attempt_count + 1, so the new value
+      // is request.attemptCount + 1.
+      if (request.attemptCount + 1 >= otpConfig.otpMaxAttemptsPerWindow) {
+        await this.otpRequestRepository.invalidateById(request.id);
+      }
+
       throw new OtpInvalidError(userId);
     }
 
+    // FR-010: Mark the OTP record as verified and record the timestamp.
+    // FR-011: Transition the user's account status to active.
     const activatedAt = new Date();
     await withTransaction(this.db, () => {
       this.db
@@ -188,6 +232,7 @@ export class DefaultOtpService implements OtpService {
       expiresAt,
       invalidatedAt: null,
       attemptSequence,
+      attemptCount: 0,
     });
 
     const dispatchSucceeded = await this.otpDeliveryPort.dispatch(user.email, code);

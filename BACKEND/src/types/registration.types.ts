@@ -19,6 +19,7 @@ export interface RegistrationRequestDto {
   emailAddress: string;
   password: string;
   passwordConfirmation: string;
+  phone?: string;
 }
 
 /**
@@ -86,6 +87,7 @@ export interface UserEntity {
   usernameNormalised: string;             // lower(trim(username))
   email: string;                          // validated email address
   passwordHash: string;                   // bcrypt hash
+  phone: string | null;                   // E.164-derived "+CountryCode-Number"
   status: 'pending' | 'active' | 'suspended' | 'deleted'; // 'deleted' added by F-04 — terminal, self-inflicted
   registrationTimestamp: Date;
   activatedAt: Date | null;

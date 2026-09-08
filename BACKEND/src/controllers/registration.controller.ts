@@ -46,6 +46,7 @@ export class RegistrationController {
       emailAddress: req.body.emailAddress as string,
       password: req.body.password as string,
       passwordConfirmation: req.body.passwordConfirmation as string,
+      phone: req.body.phone as string | undefined,
     };
 
     // --- Stage 1: Mandatory fields validation (US-065) ---

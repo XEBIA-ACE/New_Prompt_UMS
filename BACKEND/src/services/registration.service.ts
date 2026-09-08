@@ -67,10 +67,10 @@ export class DefaultRegistrationService implements RegistrationService {
       await withTransaction(this.db, () => {
         this.db
           .prepare(
-            `INSERT INTO users (id, username, username_normalised, email, password_hash, status, registration_timestamp, activated_at)
-             VALUES (?, ?, ?, ?, ?, 'pending', ?, NULL)`,
+            `INSERT INTO users (id, username, username_normalised, email, password_hash, phone, status, registration_timestamp, activated_at)
+             VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, NULL)`,
           )
-          .run(userId, dto.username, usernameNormalised, dto.emailAddress, passwordHash, now.toISOString());
+          .run(userId, dto.username, usernameNormalised, dto.emailAddress, passwordHash, dto.phone ?? null, now.toISOString());
       });
 
       return {

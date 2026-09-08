@@ -3,6 +3,7 @@ export interface RegisterUserRequest {
   emailAddress: string;
   password: string;
   passwordConfirmation: string;
+  phone?: string;
 }
 
 export interface RegisterUserSuccessResponse {

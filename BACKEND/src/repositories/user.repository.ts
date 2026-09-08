@@ -51,6 +51,7 @@ interface UserRow {
   username_normalised: string;
   email: string;
   password_hash: string;
+  phone: string | null;
   status: 'pending' | 'active' | 'suspended' | 'deleted';
   registration_timestamp: string;
   activated_at: string | null;
@@ -71,6 +72,7 @@ function rowToEntity(row: UserRow): UserEntity {
     usernameNormalised: row.username_normalised,
     email: row.email,
     passwordHash: row.password_hash,
+    phone: row.phone ?? null,
     status: row.status,
     registrationTimestamp: new Date(row.registration_timestamp),
     activatedAt: row.activated_at === null ? null : new Date(row.activated_at),
@@ -95,9 +97,9 @@ export class UserRepository implements IUserRepository {
     const id = uuidv4();
     const sql = `
       INSERT INTO users
-        (id, username, username_normalised, email, password_hash, status,
+        (id, username, username_normalised, email, password_hash, phone, status,
          registration_timestamp, activated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     this.db
@@ -108,6 +110,7 @@ export class UserRepository implements IUserRepository {
         entity.usernameNormalised,
         entity.email,
         entity.passwordHash,
+        entity.phone ?? null,
         entity.status,
         entity.registrationTimestamp.toISOString(),
         entity.activatedAt === null ? null : entity.activatedAt.toISOString(),

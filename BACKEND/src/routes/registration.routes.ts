@@ -16,7 +16,6 @@ import { UserRepository } from '../repositories/user.repository';
 import { OtpRequestRepository } from '../repositories/otp-request.repository';
 import { DefaultRegistrationService } from '../services/registration.service';
 import { DefaultOtpService } from '../services/otp.service';
-import { RedisRateLimitGuard } from '../services/rate-limit.guard';
 import { OtpDeliveryPort } from '../adapters/otp-delivery.port';
 import { RegistrationController } from '../controllers/registration.controller';
 
@@ -28,7 +27,7 @@ import { RegistrationController } from '../controllers/registration.controller';
  */
 export function createRegistrationRouter(
   db: Database,
-  redis: Redis,
+  _redis: Redis,
   otpDeliveryPort: OtpDeliveryPort,
 ): Router {
   const router = Router();
@@ -37,7 +36,6 @@ export function createRegistrationRouter(
   const otpService = new DefaultOtpService(
     userRepo,
     new OtpRequestRepository(db),
-    new RedisRateLimitGuard(redis),
     otpDeliveryPort,
     db,
   );

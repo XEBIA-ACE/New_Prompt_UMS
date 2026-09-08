@@ -4,15 +4,24 @@
  * Entry point for POST /api/v1/otp/send, POST /api/v1/otp/resend, and
  * POST /api/v1/otp/verify.
  *
- * Request body (send/resend): { userId: string }
- * Request body (verify):      { userId: string, passcode: string }
+ * Request body (send):          { userId: string }
+ * Request body (resend):        { identity_handle: string }
+ * Request body (verify):        { userId: string, passcode: string }
  *
- * Response mapping (send/resend):
+ * Response mapping (send):
  *   accepted (delivered)        -> 202 { status: 'accepted' }
  *   accepted (dispatch failed)  -> 202 { status: 'dispatch_failed' }
  *   OtpForbiddenError           -> 403 OTP_FORBIDDEN
  *   OtpRateLimitExceededError   -> 429 OTP_RATE_LIMIT_EXCEEDED
  *   malformed body              -> 400
+ *   unexpected                  -> 500
+ *
+ * Response mapping (resend — US-009 / S-101):
+ *   success                     -> 200 { message, resend_count }
+ *   OtpSessionNotFoundError     -> 404 OTP_SESSION_NOT_FOUND
+ *   OtpAccountActivatedError    -> 409 OTP_ACCOUNT_ACTIVATED
+ *   OtpRateLimitExceededError   -> 429 OTP_RATE_LIMIT_EXCEEDED
+ *   malformed body              -> 422
  *   unexpected                  -> 500
  *
  * Response mapping (verify):
@@ -26,6 +35,7 @@
  * The plaintext OTP is never returned in any response.
  *
  * Requirements: US-002 FR-011, FR-012, FR-013; US-005 FR-001–012
+ *               US-009 FR-001–012
  */
 
 import { Request, Response } from 'express';
@@ -36,6 +46,8 @@ import {
   OtpNotFoundError,
   OtpExpiredError,
   OtpInvalidError,
+  OtpSessionNotFoundError,
+  OtpAccountActivatedError,
 } from '../errors/otp.errors';
 
 export class OtpController {
@@ -49,10 +61,49 @@ export class OtpController {
   }
 
   /**
-   * Handle POST /api/v1/otp/resend
+   * Handle POST /api/v1/otp/resend (US-009 / S-101).
+   *
+   * Accepts identity_handle (email/phone) instead of userId.
+   * Returns HTTP 200 with { message, resend_count } on success.
+   * Returns 404 when no OTP session exists, 409 when account is activated,
+   * 429 when rate limit exceeded, 422 for malformed input.
    */
   async resendOtp(req: Request, res: Response): Promise<void> {
-    await this.handle(req, res, (userId) => this.otpService.resendOtp(userId));
+    const identityHandle = req.body.identity_handle as string | undefined;
+
+    if (!identityHandle || typeof identityHandle !== 'string' || identityHandle.trim() === '') {
+      res.status(422).json({
+        errorCode: 'INVALID_INPUT',
+        message: 'identity_handle is required.',
+      });
+      return;
+    }
+
+    try {
+      const result = await this.otpService.resendOtp(identityHandle.trim());
+      res.status(200).json({
+        message: 'A new OTP has been dispatched.',
+        resend_count: result.resendCount,
+      });
+    } catch (err) {
+      if (err instanceof OtpSessionNotFoundError) {
+        res.status(404).json({ errorCode: 'OTP_SESSION_NOT_FOUND', message: err.message });
+        return;
+      }
+
+      if (err instanceof OtpAccountActivatedError) {
+        res.status(409).json({ errorCode: 'OTP_ACCOUNT_ACTIVATED', message: err.message });
+        return;
+      }
+
+      if (err instanceof OtpRateLimitExceededError) {
+        res.status(429).json({ errorCode: 'OTP_RATE_LIMIT_EXCEEDED', message: err.message });
+        return;
+      }
+
+      console.error('[OtpController] Unexpected error during resend:', err);
+      res.status(500).json({ error: 'An unexpected error occurred while processing the OTP resend.' });
+    }
   }
 
   /**

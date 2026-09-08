@@ -45,6 +45,7 @@ export interface OtpRequestEntity {
   expiresAt: Date;
   invalidatedAt: Date | null;
   attemptSequence: number;
+  resendCount: number;
 }
 
 // ---------------------------------------------------------------------------

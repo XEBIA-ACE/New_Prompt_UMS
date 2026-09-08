@@ -38,6 +38,7 @@ export function createRegistrationRouter(
     userRepo,
     new OtpRequestRepository(db),
     new RedisRateLimitGuard(redis),
+    new RedisRateLimitGuard(redis, 3, 10), // US-009: 3 per 10 min
     otpDeliveryPort,
     db,
   );

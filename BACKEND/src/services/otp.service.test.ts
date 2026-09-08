@@ -13,6 +13,8 @@ import {
   OtpNotFoundError,
   OtpExpiredError,
   OtpInvalidError,
+  OtpSessionNotFoundError,
+  OtpAccountActivatedError,
 } from '../errors/otp.errors';
 import { UserEntity } from '../types/registration.types';
 import { OtpRequestEntity } from '../types/otp.types';
@@ -33,6 +35,7 @@ function buildOtpRequest(overrides: Partial<OtpRequestEntity> = {}): OtpRequestE
     expiresAt: new Date(createdAt.getTime() + otpConfig.otpTtlMinutes * 60 * 1000),
     invalidatedAt: null,
     attemptSequence: 1,
+    resendCount: 0,
     ...overrides,
   };
 }
@@ -69,6 +72,7 @@ describe('DefaultOtpService', () => {
   let userRepository: jest.Mocked<IUserRepository>;
   let otpRequestRepository: jest.Mocked<IOtpRequestRepository>;
   let rateLimitGuard: jest.Mocked<RateLimitGuard>;
+  let reRequestRateLimitGuard: jest.Mocked<RateLimitGuard>;
   let otpDeliveryPort: jest.Mocked<OtpDeliveryPort>;
   let mockDb: ReturnType<typeof buildMockDb>;
   let service: DefaultOtpService;
@@ -90,6 +94,7 @@ describe('DefaultOtpService', () => {
     otpRequestRepository = {
       create: jest.fn(async (record) => ({ id: 'otp-1', ...record })),
       findActiveByUserId: jest.fn(),
+      findActiveByEmail: jest.fn(),
       invalidateActiveByUserId: jest.fn(),
       markDelivered: jest.fn(),
       markFailed: jest.fn(),
@@ -97,6 +102,7 @@ describe('DefaultOtpService', () => {
       getNextAttemptSequence: jest.fn().mockResolvedValue(1),
     };
     rateLimitGuard = { allow: jest.fn().mockResolvedValue(true) };
+    reRequestRateLimitGuard = { allow: jest.fn().mockResolvedValue(true) };
     otpDeliveryPort = { dispatch: jest.fn().mockResolvedValue(true) };
     mockDb = buildMockDb();
 
@@ -104,10 +110,15 @@ describe('DefaultOtpService', () => {
       userRepository,
       otpRequestRepository,
       rateLimitGuard,
+      reRequestRateLimitGuard,
       otpDeliveryPort,
       mockDb.db,
     );
   });
+
+  // -----------------------------------------------------------------------
+  // sendOtp tests (unchanged from US-002)
+  // -----------------------------------------------------------------------
 
   test('generates a 6-digit numeric OTP', async () => {
     userRepository.findById.mockResolvedValue(buildUser());
@@ -196,7 +207,7 @@ describe('DefaultOtpService', () => {
     userRepository.findById.mockResolvedValue(buildUser());
     otpDeliveryPort.dispatch.mockResolvedValue(false);
 
-    const result = await service.resendOtp('user-1');
+    const result = await service.sendOtp('user-1');
 
     expect(result).toEqual({ accepted: true, status: 'failed' });
     expect(otpRequestRepository.markFailed).toHaveBeenCalledWith('otp-1');
@@ -211,6 +222,135 @@ describe('DefaultOtpService', () => {
     expect(result).toEqual({ accepted: true, status: 'delivered' });
     expect(otpRequestRepository.markDelivered).toHaveBeenCalledWith('otp-1');
   });
+
+  // -----------------------------------------------------------------------
+  // resendOtp tests (US-009 / S-101)
+  // -----------------------------------------------------------------------
+
+  describe('resendOtp (US-009)', () => {
+    const mockPriorSession = buildOtpRequest({ resendCount: 0 });
+
+    beforeEach(() => {
+      userRepository.findById.mockResolvedValue(buildUser({ status: 'pending' }));
+      otpRequestRepository.findActiveByEmail.mockResolvedValue(mockPriorSession);
+      reRequestRateLimitGuard.allow.mockResolvedValue(true);
+    });
+
+    test('returns HTTP 200 with resend_count on valid re-request (FR-001, FR-008, FR-011)', async () => {
+      const result = await service.resendOtp('jdoe@example.test');
+
+      expect(result).toEqual({ accepted: true, resendCount: 1 });
+      expect(otpRequestRepository.create).toHaveBeenCalled();
+    });
+
+    test('rejects with 404 when no prior OTP session exists (FR-006)', async () => {
+      otpRequestRepository.findActiveByEmail.mockResolvedValue(null);
+
+      await expect(service.resendOtp('unknown@example.test')).rejects.toBeInstanceOf(
+        OtpSessionNotFoundError,
+      );
+      expect(otpRequestRepository.create).not.toHaveBeenCalled();
+    });
+
+    test('rejects with 409 when account is already activated (FR-005)', async () => {
+      userRepository.findById.mockResolvedValue(buildUser({ status: 'active' }));
+
+      await expect(service.resendOtp('jdoe@example.test')).rejects.toBeInstanceOf(
+        OtpAccountActivatedError,
+      );
+      expect(otpRequestRepository.create).not.toHaveBeenCalled();
+    });
+
+    test('rejects with 429 when re-request rate limit is exceeded (FR-007)', async () => {
+      reRequestRateLimitGuard.allow.mockResolvedValue(false);
+
+      await expect(service.resendOtp('jdoe@example.test')).rejects.toBeInstanceOf(
+        OtpRateLimitExceededError,
+      );
+      expect(otpRequestRepository.create).not.toHaveBeenCalled();
+    });
+
+    test('invalidates the prior OTP row before issuing a new one (FR-002)', async () => {
+      await service.resendOtp('jdoe@example.test');
+
+      expect(otpRequestRepository.invalidateActiveByUserId).toHaveBeenCalledWith('user-1');
+      expect(otpRequestRepository.invalidateActiveByUserId.mock.invocationCallOrder[0]).toBeLessThan(
+        otpRequestRepository.create.mock.invocationCallOrder[0],
+      );
+    });
+
+    test('uses the OTP session delivery address, not user.email (FR-004, A-002)', async () => {
+      const differentEmail = 'other@example.test';
+      otpRequestRepository.findActiveByEmail.mockResolvedValue(
+        buildOtpRequest({ resendCount: 0, emailAddress: differentEmail }),
+      );
+      userRepository.findById.mockResolvedValue(
+        buildUser({ email: 'jdoe@example.test', status: 'pending' }),
+      );
+
+      await service.resendOtp(differentEmail);
+
+      expect(otpDeliveryPort.dispatch).toHaveBeenCalledWith(differentEmail, expect.any(String));
+    });
+
+    test('new OTP row has attemptSequence = 0 (FR-012)', async () => {
+      await service.resendOtp('jdoe@example.test');
+
+      const createCall = otpRequestRepository.create.mock.calls[0][0];
+      expect(createCall.attemptSequence).toBe(0);
+    });
+
+    test('new OTP row carries forward resend_count + 1 (FR-011)', async () => {
+      otpRequestRepository.findActiveByEmail.mockResolvedValue(
+        buildOtpRequest({ resendCount: 2 }),
+      );
+
+      await service.resendOtp('jdoe@example.test');
+
+      const createCall = otpRequestRepository.create.mock.calls[0][0];
+      expect(createCall.resendCount).toBe(3);
+    });
+
+    test('generates a new OTP with fresh expiry (FR-003)', async () => {
+      await service.resendOtp('jdoe@example.test');
+
+      const createCall = otpRequestRepository.create.mock.calls[0][0];
+      const diffMs = createCall.expiresAt.getTime() - createCall.createdAt.getTime();
+      expect(diffMs).toBe(otpConfig.otpTtlMinutes * 60 * 1000);
+    });
+
+    test('OTP value is absent from the response (FR-008)', async () => {
+      const result = await service.resendOtp('jdoe@example.test');
+
+      expect(result.accepted).toBe(true);
+      expect(result.resendCount).toBe(1);
+      // The result object should not contain the code or codeHash
+      expect('code' in result).toBe(false);
+      expect('codeHash' in result).toBe(false);
+    });
+
+    test('handles orphaned OTP row (user deleted) as no session (FR-006)', async () => {
+      userRepository.findById.mockResolvedValue(null);
+
+      await expect(service.resendOtp('jdoe@example.test')).rejects.toBeInstanceOf(
+        OtpSessionNotFoundError,
+      );
+    });
+
+    test('dispatch failure is recorded but still returns accepted (FR-010)', async () => {
+      otpDeliveryPort.dispatch.mockResolvedValue(false);
+
+      const result = await service.resendOtp('jdoe@example.test');
+
+      expect(result).toEqual({ accepted: true, resendCount: 1 });
+      expect(otpRequestRepository.markFailed).toHaveBeenCalledWith('otp-1');
+      expect(otpRequestRepository.markDelivered).not.toHaveBeenCalled();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // verifyOtp tests (unchanged from US-002)
+  // -----------------------------------------------------------------------
 
   describe('verifyOtp', () => {
     test('activates the account and consumes the OTP on a correct code', async () => {

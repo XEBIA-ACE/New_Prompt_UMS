@@ -18,6 +18,7 @@ import { OtpRequestEntity } from '../types/otp.types';
 export interface IOtpRequestRepository {
   create(record: Omit<OtpRequestEntity, 'id'>): Promise<OtpRequestEntity>;
   findActiveByUserId(userId: string): Promise<OtpRequestEntity | null>;
+  findActiveByEmail(emailAddress: string): Promise<OtpRequestEntity | null>;
   invalidateActiveByUserId(userId: string): Promise<void>;
   markDelivered(id: string): Promise<void>;
   markFailed(id: string): Promise<void>;
@@ -39,6 +40,7 @@ interface OtpRequestRow {
   expires_at: string;
   invalidated_at: string | null;
   attempt_sequence: number;
+  resend_count: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -56,6 +58,7 @@ function rowToEntity(row: OtpRequestRow): OtpRequestEntity {
     expiresAt: new Date(row.expires_at),
     invalidatedAt: row.invalidated_at === null ? null : new Date(row.invalidated_at),
     attemptSequence: row.attempt_sequence,
+    resendCount: row.resend_count,
   };
 }
 
@@ -76,8 +79,8 @@ export class OtpRequestRepository implements IOtpRequestRepository {
       .prepare(
         `INSERT INTO otp_requests
           (id, user_id, email_address, code_hash, status, created_at, expires_at,
-           invalidated_at, attempt_sequence)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           invalidated_at, attempt_sequence, resend_count)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -89,6 +92,7 @@ export class OtpRequestRepository implements IOtpRequestRepository {
         record.expiresAt.toISOString(),
         record.invalidatedAt === null ? null : record.invalidatedAt.toISOString(),
         record.attemptSequence,
+        record.resendCount,
       );
 
     const row = this.db.prepare('SELECT * FROM otp_requests WHERE id = ?').get(id) as OtpRequestRow;
@@ -103,6 +107,22 @@ export class OtpRequestRepository implements IOtpRequestRepository {
     const row = this.db
       .prepare('SELECT * FROM otp_requests WHERE user_id = ? AND invalidated_at IS NULL LIMIT 1')
       .get(userId) as OtpRequestRow | undefined;
+
+    return row === undefined ? null : rowToEntity(row);
+  }
+
+  /**
+   * Look up the current active (non-invalidated) OTP request by email address.
+   * Used by the OTP re-request flow (US-009) to locate an existing session
+   * without requiring the caller to supply a userId — per assumption A-001.
+   * Returns null if there is none.
+   */
+  async findActiveByEmail(emailAddress: string): Promise<OtpRequestEntity | null> {
+    const row = this.db
+      .prepare(
+        'SELECT * FROM otp_requests WHERE email_address = ? AND invalidated_at IS NULL LIMIT 1',
+      )
+      .get(emailAddress) as OtpRequestRow | undefined;
 
     return row === undefined ? null : rowToEntity(row);
   }

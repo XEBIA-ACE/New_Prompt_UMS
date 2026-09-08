@@ -100,17 +100,21 @@ describe('Integration | OTP send and resend', () => {
   });
 
   test('POST /api/v1/otp/resend happy path invalidates the prior OTP and issues a new one', async () => {
-    const user = await insertUser('active');
+    const user = await insertUser('pending');
 
+    // First send an OTP to create a session
     await request(app).post('/api/v1/otp/send').send({ userId: user.id }).expect(202);
     const firstCode = deliveryPort.dispatched[0].code;
 
+    // Now resend using the email address (identity_handle)
     const response = await request(app)
       .post('/api/v1/otp/resend')
-      .send({ userId: user.id })
-      .expect(202);
+      .send({ identity_handle: user.email })
+      .expect(200);
 
-    expect(response.body).toEqual({ status: 'accepted' });
+    expect(response.body).toHaveProperty('message');
+    expect(response.body).toHaveProperty('resend_count');
+    expect(response.body.resend_count).toBe(1);
     const secondCode = deliveryPort.dispatched[1].code;
     expect(secondCode).not.toBe(firstCode);
 
@@ -120,6 +124,12 @@ describe('Integration | OTP send and resend', () => {
     expect(rows).toHaveLength(2);
     expect(rows[0].invalidated_at).not.toBeNull();
     expect(rows[1].invalidated_at).toBeNull();
+
+    // Verify resend_count was set on the new row
+    const newRow = db
+      .prepare('SELECT resend_count FROM otp_requests WHERE user_id = ? ORDER BY created_at DESC LIMIT 1')
+      .get(user.id) as { resend_count: number };
+    expect(newRow.resend_count).toBe(1);
 
     await redis.del(`otp:rl:${user.id}`);
   });
@@ -181,6 +191,154 @@ describe('Integration | OTP send and resend', () => {
     expect(JSON.stringify(response.body)).not.toContain(dispatchedCode);
 
     await redis.del(`otp:rl:${user.id}`);
+  });
+});
+
+describe('Integration | OTP resend (US-009 / S-101)', () => {
+  test('POST /api/v1/otp/resend returns 404 when no OTP session exists for the email', async () => {
+    // Insert a user but never send them an OTP
+    await insertUser('pending');
+
+    const response = await request(app)
+      .post('/api/v1/otp/resend')
+      .send({ identity_handle: 'nonexistent@example.test' })
+      .expect(404);
+
+    expect(response.body.errorCode).toBe('OTP_SESSION_NOT_FOUND');
+    expect(deliveryPort.dispatched).toHaveLength(0);
+  });
+
+  test('POST /api/v1/otp/resend returns 409 when account is already activated', async () => {
+    const user = await insertUser('active');
+
+    // Create an OTP session for this active user
+    await request(app).post('/api/v1/otp/send').send({ userId: user.id }).expect(202);
+
+    const response = await request(app)
+      .post('/api/v1/otp/resend')
+      .send({ identity_handle: user.email })
+      .expect(409);
+
+    expect(response.body.errorCode).toBe('OTP_ACCOUNT_ACTIVATED');
+    expect(deliveryPort.dispatched.length).toBe(1); // only the original send, no resend
+  });
+
+  test('POST /api/v1/otp/resend returns 429 when re-request rate limit exceeded (3 per 10 min)', async () => {
+    const user = await insertUser('pending');
+
+    // Create an initial OTP session via send
+    await request(app).post('/api/v1/otp/send').send({ userId: user.id }).expect(202);
+
+    // 3 successful re-requests (within the limit)
+    for (let i = 0; i < 3; i++) {
+      const response = await request(app)
+        .post('/api/v1/otp/resend')
+        .send({ identity_handle: user.email })
+        .expect(200);
+      expect(response.body).toHaveProperty('resend_count');
+    }
+
+    // 4th re-request should be rejected
+    const response = await request(app)
+      .post('/api/v1/otp/resend')
+      .send({ identity_handle: user.email })
+      .expect(429);
+
+    expect(response.body.errorCode).toBe('OTP_RATE_LIMIT_EXCEEDED');
+
+    await redis.del(`otp:rl:${user.email}`);
+  });
+
+  test('POST /api/v1/otp/resend returns 422 for malformed input', async () => {
+    await request(app)
+      .post('/api/v1/otp/resend')
+      .send({})
+      .expect(422);
+
+    await request(app)
+      .post('/api/v1/otp/resend')
+      .send({ identity_handle: '' })
+      .expect(422);
+  });
+
+  test('POST /api/v1/otp/resend delivers to the OTP session email address (FR-004)', async () => {
+    const user = await insertUser('pending');
+
+    // Create an OTP session via send
+    await request(app).post('/api/v1/otp/send').send({ userId: user.id }).expect(202);
+    const originalDestination = deliveryPort.dispatched[0].destination;
+
+    // Resend — should go to the same email as the original session
+    await request(app)
+      .post('/api/v1/otp/resend')
+      .send({ identity_handle: user.email })
+      .expect(200);
+
+    expect(deliveryPort.dispatched[1].destination).toBe(originalDestination);
+    expect(deliveryPort.dispatched[1].destination).toBe(user.email);
+
+    await redis.del(`otp:rl:${user.email}`);
+  });
+
+  test('POST /api/v1/otp/resend increments resend_count on each re-request (FR-011)', async () => {
+    const user = await insertUser('pending');
+
+    // Create initial OTP session
+    await request(app).post('/api/v1/otp/send').send({ userId: user.id }).expect(202);
+
+    // First resend
+    let response = await request(app)
+      .post('/api/v1/otp/resend')
+      .send({ identity_handle: user.email })
+      .expect(200);
+    expect(response.body.resend_count).toBe(1);
+
+    // Second resend
+    response = await request(app)
+      .post('/api/v1/otp/resend')
+      .send({ identity_handle: user.email })
+      .expect(200);
+    expect(response.body.resend_count).toBe(2);
+
+    await redis.del(`otp:rl:${user.email}`);
+  });
+
+  test('POST /api/v1/otp/resend new OTP has attemptSequence = 0 (FR-012)', async () => {
+    const user = await insertUser('pending');
+
+    // Create initial OTP session
+    await request(app).post('/api/v1/otp/send').send({ userId: user.id }).expect(202);
+
+    // Resend
+    await request(app)
+      .post('/api/v1/otp/resend')
+      .send({ identity_handle: user.email })
+      .expect(200);
+
+    const newRow = db
+      .prepare('SELECT attempt_sequence FROM otp_requests WHERE user_id = ? ORDER BY created_at DESC LIMIT 1')
+      .get(user.id) as { attempt_sequence: number };
+    expect(newRow.attempt_sequence).toBe(0);
+
+    await redis.del(`otp:rl:${user.email}`);
+  });
+
+  test('POST /api/v1/otp/resend OTP value absent from response body (FR-008)', async () => {
+    const user = await insertUser('pending');
+
+    await request(app).post('/api/v1/otp/send').send({ userId: user.id }).expect(202);
+    const dispatchedCode = deliveryPort.dispatched[0].code;
+
+    const response = await request(app)
+      .post('/api/v1/otp/resend')
+      .send({ identity_handle: user.email })
+      .expect(200);
+
+    expect(JSON.stringify(response.body)).not.toContain(dispatchedCode);
+    expect(response.body).not.toHaveProperty('otp');
+    expect(response.body).not.toHaveProperty('code');
+
+    await redis.del(`otp:rl:${user.email}`);
   });
 });
 

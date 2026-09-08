@@ -1,38 +1,36 @@
 /**
  * otp.service.ts
  *
- * Core OTP issuance logic for send and resend flows (US-002).
+ * Core OTP generation logic for the Generate Unique OTP feature (US-001).
  *
- * sendOtp / resendOtp share identical rules:
+ * generateAndSend() follows this rule sequence:
  *   1. Load user by id.
- *   2. Unknown user       -> return an accepted result without disclosure.
- *   3. Inactive/suspended -> throw OtpForbiddenError (mapped to 403 upstream).
- *   4. Rate limit exceeded -> throw OtpRateLimitExceededError (mapped to 429).
- *   5. Invalidate any existing active OTP for the user.
- *   6. Generate a numeric OTP and hash it with a keyed HMAC before persisting.
- *   7. Persist the OTP request with expiry = createdAt + OTP_TTL_MINUTES.
- *   8. Dispatch the code to the user's email address.
- *   9. Record delivery status as `delivered` or `failed` based on the
- *      provider outcome, but always report `accepted: true` to the caller —
- *      dispatch failure is tracked for observability, not surfaced as an error.
+ *   2. Unknown user       -> throw OtpUserNotFoundError (mapped to 404 upstream, FR-008).
+ *   3. Suspended/deactivated -> throw OtpAccountIneligibleError (mapped to 422 upstream, FR-009).
+ *   4. Expire any existing ACTIVE OTP for the same user+purpose (FR-004, EC-001).
+ *   5. Generate a cryptographically random numeric code (FR-001, A-003).
+ *   6. Hash the code with bcrypt (FR-007).
+ *   7. Persist the OTP record with expiry = createdAt + otp.expiry.seconds (FR-003, FR-005).
+ *   8. Dispatch the code to the user's email address (FR-006).
+ *   9. Report delivery status as `delivered` or `failed` — never surfaces
+ *      the plaintext OTP to the caller (FR-007, FR-011).
+ *   10. If persistence fails, delivery is NOT attempted (FR-012).
  *
- * Requirements: US-002 FR-002, FR-003, FR-004, FR-005, FR-006, FR-009, FR-010
+ * Requirements: US-001 FR-001–007, FR-009, FR-011, FR-012
  */
 
 import crypto from 'crypto';
+import bcrypt from 'bcrypt';
 import type { Database } from 'better-sqlite3';
 import { withTransaction } from '../db/with-transaction';
 import { IUserRepository } from '../repositories/user.repository';
 import { IOtpRequestRepository } from '../repositories/otp-request.repository';
-import { RateLimitGuard } from './rate-limit.guard';
 import { OtpDeliveryPort } from '../adapters/otp-delivery.port';
-import { OtpDispatchResult } from '../types/otp.types';
+import { OtpSendResult, OtpPurpose } from '../types/otp.types';
 import {
-  OtpForbiddenError,
-  OtpRateLimitExceededError,
-  OtpNotFoundError,
-  OtpExpiredError,
-  OtpInvalidError,
+  OtpUserNotFoundError,
+  OtpAccountIneligibleError,
+  OtpPersistenceError,
 } from '../errors/otp.errors';
 import { otpConfig } from '../config/otp.config';
 
@@ -40,15 +38,11 @@ import { otpConfig } from '../config/otp.config';
 // Interface
 // ---------------------------------------------------------------------------
 
-export interface OtpVerifyResult {
-  userId: string;
-  activatedAt: Date;
-}
-
 export interface OtpService {
-  sendOtp(userId: string): Promise<OtpDispatchResult>;
-  resendOtp(userId: string): Promise<OtpDispatchResult>;
-  verifyOtp(userId: string, passcode: string): Promise<OtpVerifyResult>;
+  generateAndSend(
+    userId: string,
+    purpose: OtpPurpose,
+  ): Promise<OtpSendResult>;
 }
 
 // ---------------------------------------------------------------------------
@@ -58,22 +52,14 @@ export interface OtpService {
 /**
  * Generate a cryptographically random numeric code of the given length,
  * zero-padded (e.g. length 6 -> "004821").
+ *
+ * Uses crypto.randomInt which draws from the OS CSPRNG, satisfying
+ * FR-001 (cryptographically unpredictable).
  */
 function generateNumericCode(length: number): string {
   const upperBoundExclusive = 10 ** length;
   const value = crypto.randomInt(0, upperBoundExclusive);
   return value.toString().padStart(length, '0');
-}
-
-/**
- * Hash a plaintext OTP code with a keyed HMAC so the persisted value is
- * non-reversible. Plaintext is never stored.
- */
-function hashOtpCode(code: string): string {
-  return crypto
-    .createHmac(otpConfig.otpHashAlgorithm, otpConfig.otpHashSecret)
-    .update(code)
-    .digest('hex');
 }
 
 // ---------------------------------------------------------------------------
@@ -84,120 +70,75 @@ export class DefaultOtpService implements OtpService {
   constructor(
     private readonly userRepository: IUserRepository,
     private readonly otpRequestRepository: IOtpRequestRepository,
-    private readonly rateLimitGuard: RateLimitGuard,
     private readonly otpDeliveryPort: OtpDeliveryPort,
     private readonly db: Database,
   ) {}
 
-  async sendOtp(userId: string): Promise<OtpDispatchResult> {
-    return this.issueOtp(userId);
-  }
-
-  async resendOtp(userId: string): Promise<OtpDispatchResult> {
-    return this.issueOtp(userId);
-  }
-
   /**
-   * Verify a submitted OTP code and, on success, activate the user's account.
+   * Generate, persist, and dispatch an OTP for the given user and purpose.
    *
-   * @throws OtpNotFoundError - no active (non-invalidated) OTP exists for the user.
-   * @throws OtpExpiredError  - the active OTP's expiry has passed.
-   * @throws OtpInvalidError  - the submitted code does not match.
+   * @throws OtpUserNotFoundError        - user does not exist (FR-008).
+   * @throws OtpAccountIneligibleError   - account is suspended/deactivated (FR-009).
+   * @throws OtpPersistenceError         - database write failed before delivery (FR-012).
    */
-  async verifyOtp(userId: string, passcode: string): Promise<OtpVerifyResult> {
-    const user = await this.userRepository.findById(userId);
-    if (user === null || (user.status !== 'pending' && user.status !== 'active')) {
-      throw new OtpNotFoundError(userId);
-    }
-
-    const request = await this.otpRequestRepository.findActiveByUserId(userId);
-    if (request === null) {
-      throw new OtpNotFoundError(userId);
-    }
-
-    if (new Date() > request.expiresAt) {
-      throw new OtpExpiredError(userId);
-    }
-
-    const submittedHash = Buffer.from(hashOtpCode(passcode));
-    const storedHash = Buffer.from(request.codeHash);
-    const matches =
-      submittedHash.length === storedHash.length &&
-      crypto.timingSafeEqual(submittedHash, storedHash);
-
-    if (!matches) {
-      throw new OtpInvalidError(userId);
-    }
-
-    const activatedAt = new Date();
-    await withTransaction(this.db, () => {
-      this.db
-        .prepare(`UPDATE users SET status = 'active', activated_at = ? WHERE id = ?`)
-        .run(activatedAt.toISOString(), userId);
-
-      this.db
-        .prepare(`UPDATE otp_requests SET invalidated_at = ? WHERE id = ?`)
-        .run(activatedAt.toISOString(), request.id);
-    });
-
-    return { userId, activatedAt };
-  }
-
-  /**
-   * Shared send/resend implementation — see file-level doc comment for the
-   * full rule sequence.
-   *
-   * @throws OtpForbiddenError         - account is not active.
-   * @throws OtpRateLimitExceededError - too many attempts within the window.
-   */
-  private async issueOtp(userId: string): Promise<OtpDispatchResult> {
+  async generateAndSend(
+    userId: string,
+    purpose: OtpPurpose,
+  ): Promise<OtpSendResult> {
+    // Step 1–3: Validate user existence and account state.
     const user = await this.userRepository.findById(userId);
 
     if (user === null) {
-      // Never disclose whether a given user id exists.
-      return { accepted: true, status: 'delivered' };
+      throw new OtpUserNotFoundError(userId);
     }
 
-    // Both freshly-registered ('pending') and already-verified ('active')
-    // accounts may request an OTP — 'pending' covers post-registration
-    // activation, 'active' covers any future login step-up/re-verification use.
-    if (user.status !== 'active' && user.status !== 'pending') {
-      throw new OtpForbiddenError(userId, user.status);
+    if (user.status === 'suspended' || user.status === 'deleted') {
+      throw new OtpAccountIneligibleError(userId, user.status);
     }
 
-    const allowed = await this.rateLimitGuard.allow(userId);
-    if (!allowed) {
-      throw new OtpRateLimitExceededError(userId);
-    }
+    // Step 4: Expire any existing ACTIVE OTP for this user+purpose (FR-004).
+    await this.otpRequestRepository.expireActiveByUserAndPurpose(userId, purpose);
 
-    await this.otpRequestRepository.invalidateActiveByUserId(userId);
-
+    // Steps 5–6: Generate code and hash it.
     const code = generateNumericCode(otpConfig.otpLength);
-    const codeHash = hashOtpCode(code);
+    const codeHash = await bcrypt.hash(code, otpConfig.bcryptWorkFactor);
 
+    // Step 7: Persist the OTP record (FR-003, FR-005).
     const createdAt = new Date();
-    const expiresAt = new Date(createdAt.getTime() + otpConfig.otpTtlMinutes * 60 * 1000);
-    const attemptSequence = await this.otpRequestRepository.getNextAttemptSequence(userId);
+    const expiresAt = new Date(
+      createdAt.getTime() + otpConfig.otpExpirySeconds * 1000,
+    );
 
-    const request = await this.otpRequestRepository.create({
-      userId,
-      emailAddress: user.email,
-      codeHash,
-      status: 'pending',
-      createdAt,
-      expiresAt,
-      invalidatedAt: null,
-      attemptSequence,
-    });
-
-    const dispatchSucceeded = await this.otpDeliveryPort.dispatch(user.email, code);
-
-    if (dispatchSucceeded) {
-      await this.otpRequestRepository.markDelivered(request.id);
-      return { accepted: true, status: 'delivered' };
+    try {
+      withTransaction(this.db, () => {
+        this.db
+          .prepare(
+            `INSERT INTO otp_requests
+              (id, user_id, email_address, code_hash, status, purpose,
+               created_at, expires_at, attempt_sequence)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .run(
+            crypto.randomUUID(),
+            userId,
+            user.email,
+            codeHash,
+            'ACTIVE',
+            purpose,
+            createdAt.toISOString(),
+            expiresAt.toISOString(),
+            0,
+          );
+      });
+    } catch (err) {
+      const cause = err instanceof Error ? err.message : 'Unknown error';
+      throw new OtpPersistenceError(userId, cause);
     }
 
-    await this.otpRequestRepository.markFailed(request.id);
-    return { accepted: true, status: 'failed' };
+    // Step 8: Dispatch the code (FR-006).
+    const dispatched = await this.otpDeliveryPort.dispatch(user.email, code);
+
+    // Step 9: Report status without revealing the code (FR-007, FR-011).
+    return { accepted: true, status: dispatched ? 'delivered' : 'failed' };
   }
 }

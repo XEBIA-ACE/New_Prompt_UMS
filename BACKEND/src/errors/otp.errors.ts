@@ -1,91 +1,56 @@
 /**
  * otp.errors.ts
  *
- * Custom domain error classes for the OTP Delivery via SMS Feature (F-02).
+ * Custom domain error classes for the Generate Unique OTP feature (US-001).
  * All errors extend the built-in Error class so they are instanceof-compatible
  * with standard JS error handling.
+ *
+ * Requirements: US-001 FR-008, FR-009
  */
 
 // ---------------------------------------------------------------------------
-// Rate limiting
+// User not found (FR-008)
 // ---------------------------------------------------------------------------
 
-export class OtpRateLimitExceededError extends Error {
+export class OtpUserNotFoundError extends Error {
   public readonly userId: string;
 
   constructor(userId: string) {
-    super(`OTP rate limit exceeded for user '${userId}'.`);
-    this.name = 'OtpRateLimitExceededError';
+    super(`User '${userId}' not found.`);
+    this.name = 'OtpUserNotFoundError';
     this.userId = userId;
-    Object.setPrototypeOf(this, OtpRateLimitExceededError.prototype);
+    Object.setPrototypeOf(this, OtpUserNotFoundError.prototype);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Account state
+// Account ineligible — suspended or deactivated (FR-009)
 // ---------------------------------------------------------------------------
 
-export class OtpForbiddenError extends Error {
+export class OtpAccountIneligibleError extends Error {
   public readonly userId: string;
   public readonly accountStatus: string;
 
   constructor(userId: string, accountStatus: string) {
-    super(`OTP dispatch is forbidden for user '${userId}' with account status '${accountStatus}'.`);
-    this.name = 'OtpForbiddenError';
+    super(`OTP generation is not allowed for user '${userId}' with account status '${accountStatus}'.`);
+    this.name = 'OtpAccountIneligibleError';
     this.userId = userId;
     this.accountStatus = accountStatus;
-    Object.setPrototypeOf(this, OtpForbiddenError.prototype);
+    Object.setPrototypeOf(this, OtpAccountIneligibleError.prototype);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Dispatch failures
+// Persistence failure — delivery must NOT be attempted (FR-012)
 // ---------------------------------------------------------------------------
 
-export class OtpDispatchFailedError extends Error {
+export class OtpPersistenceError extends Error {
   public readonly userId: string;
 
-  constructor(userId: string, reason?: string) {
-    super(`Failed to dispatch OTP for user '${userId}'${reason ? `: ${reason}` : ''}.`);
-    this.name = 'OtpDispatchFailedError';
+  constructor(userId: string, cause?: string) {
+    super(`Failed to persist OTP for user '${userId}'${cause ? `: ${cause}` : ''}.`);
+    this.name = 'OtpPersistenceError';
     this.userId = userId;
-    Object.setPrototypeOf(this, OtpDispatchFailedError.prototype);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Verification flow
-// ---------------------------------------------------------------------------
-
-export class OtpNotFoundError extends Error {
-  public readonly userId: string;
-
-  constructor(userId: string) {
-    super(`No active OTP request was found for user '${userId}'.`);
-    this.name = 'OtpNotFoundError';
-    this.userId = userId;
-    Object.setPrototypeOf(this, OtpNotFoundError.prototype);
-  }
-}
-
-export class OtpExpiredError extends Error {
-  public readonly userId: string;
-
-  constructor(userId: string) {
-    super(`The OTP for user '${userId}' has expired.`);
-    this.name = 'OtpExpiredError';
-    this.userId = userId;
-    Object.setPrototypeOf(this, OtpExpiredError.prototype);
-  }
-}
-
-export class OtpInvalidError extends Error {
-  public readonly userId: string;
-
-  constructor(userId: string) {
-    super(`The submitted OTP is incorrect for user '${userId}'.`);
-    this.name = 'OtpInvalidError';
-    this.userId = userId;
-    Object.setPrototypeOf(this, OtpInvalidError.prototype);
+    Object.setPrototypeOf(this, OtpPersistenceError.prototype);
   }
 }

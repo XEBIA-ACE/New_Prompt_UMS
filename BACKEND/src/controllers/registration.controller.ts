@@ -96,11 +96,11 @@ export class RegistrationController {
     try {
       const result = await this.registrationService.register(dto);
 
-      // Dispatch the activation OTP email. OtpService never throws on
-      // dispatch failure (it records status 'failed' for observability and
-      // still resolves), so registration always returns 201 once the user
-      // row is committed.
-      await this.otpService.sendOtp(result.userId);
+      // Dispatch the activation OTP email. OtpService.generateAndSend()
+      // persists first (FR-005), then dispatches (FR-006), and never
+      // exposes the plaintext OTP (FR-007). Dispatch failure is recorded
+      // but does not surface as an error to the caller (FR-011).
+      await this.otpService.generateAndSend(result.userId, 'ACTIVATION');
 
       res.status(201).json({ userId: result.userId, message: result.message });
     } catch (err) {

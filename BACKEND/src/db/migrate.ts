@@ -25,6 +25,7 @@ const MIGRATION_FILES = [
   '006_create_password_recovery_requests.sql',
   '007_create_account_deletion_requests.sql',
   '008_create_account_deletion_notification_records.sql',
+  '009_alter_otp_requests_for_us001.sql',
 ];
 
 export function runMigrations(db: Database): void {

@@ -5,6 +5,11 @@ process.env.OTP_RATE_LIMIT_WINDOW_MINUTES = '15';
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
 process.env.REDIS_URL = REDIS_URL;
 
+// Mock bcrypt — native module can't compile in this env.
+jest.mock('bcrypt', () => ({
+  hash: jest.fn((value: string) => Promise.resolve(`$2b$10$mocked_hash_for_${value}`)),
+}));
+
 import request from 'supertest';
 import express, { Express } from 'express';
 import type { Database } from 'better-sqlite3';
@@ -39,7 +44,7 @@ function randomSuffix(): string {
   return Math.random().toString(36).slice(2, 10);
 }
 
-function insertUser(status: 'pending' | 'active' | 'suspended'): { id: string; email: string } {
+function insertUser(status: 'pending' | 'active' | 'suspended' | 'deleted'): { id: string; email: string } {
   const suffix = randomSuffix();
   const email = `${suffix}@example.test`;
   const id = uuidv4();
@@ -72,16 +77,16 @@ afterAll(async () => {
   await redis.quit();
 });
 
-describe('Integration | OTP send and resend', () => {
+describe('Integration | OTP send', () => {
   test('POST /api/v1/otp/send happy path accepts and delivers to an active user', async () => {
     const user = await insertUser('active');
 
     const response = await request(app)
       .post('/api/v1/otp/send')
-      .send({ userId: user.id })
+      .send({ userId: user.id, purpose: 'ACTIVATION' })
       .expect(202);
 
-    expect(response.body).toEqual({ status: 'accepted' });
+    expect(response.body).toMatchObject({ status: 'accepted' });
     expect(deliveryPort.dispatched).toHaveLength(1);
     expect(deliveryPort.dispatched[0].destination).toBe(user.email);
 
@@ -90,81 +95,116 @@ describe('Integration | OTP send and resend', () => {
     expect(JSON.stringify(response.body)).not.toContain(dispatchedCode);
 
     const otpRow = db
-      .prepare('SELECT status, email_address, code_hash FROM otp_requests WHERE user_id = ?')
-      .get(user.id) as { status: string; email_address: string; code_hash: string };
-    expect(otpRow.status).toBe('delivered');
+      .prepare('SELECT status, email_address, purpose FROM otp_requests WHERE user_id = ?')
+      .get(user.id) as { status: string; email_address: string; purpose: string };
+    expect(otpRow.status).toBe('ACTIVE');
     expect(otpRow.email_address).toBe(user.email);
-    expect(otpRow.code_hash).not.toBe(dispatchedCode);
-
-    await redis.del(`otp:rl:${user.id}`);
+    expect(otpRow.purpose).toBe('ACTIVATION');
   });
 
-  test('POST /api/v1/otp/resend happy path invalidates the prior OTP and issues a new one', async () => {
+  test('POST /api/v1/otp/send associates OTP with the correct purpose', async () => {
     const user = await insertUser('active');
 
-    await request(app).post('/api/v1/otp/send').send({ userId: user.id }).expect(202);
-    const firstCode = deliveryPort.dispatched[0].code;
-
-    const response = await request(app)
-      .post('/api/v1/otp/resend')
-      .send({ userId: user.id })
+    await request(app)
+      .post('/api/v1/otp/send')
+      .send({ userId: user.id, purpose: 'PASSWORD_RECOVERY' })
       .expect(202);
 
-    expect(response.body).toEqual({ status: 'accepted' });
-    const secondCode = deliveryPort.dispatched[1].code;
-    expect(secondCode).not.toBe(firstCode);
-
-    const rows = db
-      .prepare('SELECT invalidated_at FROM otp_requests WHERE user_id = ? ORDER BY created_at ASC')
-      .all(user.id) as Array<{ invalidated_at: string | null }>;
-    expect(rows).toHaveLength(2);
-    expect(rows[0].invalidated_at).not.toBeNull();
-    expect(rows[1].invalidated_at).toBeNull();
-
-    await redis.del(`otp:rl:${user.id}`);
+    const otpRow = db
+      .prepare('SELECT purpose FROM otp_requests WHERE user_id = ?')
+      .get(user.id) as { purpose: string };
+    expect(otpRow.purpose).toBe('PASSWORD_RECOVERY');
   });
 
-  test('POST /api/v1/otp/send accepts a pending user (post-registration activation)', async () => {
-    const user = await insertUser('pending');
-
+  test('POST /api/v1/otp/send returns 404 for a non-existent user', async () => {
     const response = await request(app)
       .post('/api/v1/otp/send')
-      .send({ userId: user.id })
-      .expect(202);
+      .send({ userId: uuidv4(), purpose: 'ACTIVATION' })
+      .expect(404);
 
-    expect(response.body).toEqual({ status: 'accepted' });
-    expect(deliveryPort.dispatched).toHaveLength(1);
-
-    await redis.del(`otp:rl:${user.id}`);
+    expect(response.body.errorCode).toBe('OTP_USER_NOT_FOUND');
+    expect(deliveryPort.dispatched).toHaveLength(0);
   });
 
-  test('POST /api/v1/otp/send returns 403 for a suspended user', async () => {
+  test('POST /api/v1/otp/send returns 422 for a suspended user', async () => {
     const user = await insertUser('suspended');
 
     const response = await request(app)
       .post('/api/v1/otp/send')
-      .send({ userId: user.id })
-      .expect(403);
+      .send({ userId: user.id, purpose: 'ACTIVATION' })
+      .expect(422);
 
-    expect(response.body.errorCode).toBe('OTP_FORBIDDEN');
+    expect(response.body.errorCode).toBe('OTP_ACCOUNT_INELIGIBLE');
     expect(deliveryPort.dispatched).toHaveLength(0);
   });
 
-  test('POST /api/v1/otp/send returns 429 once the rate limit window is exceeded', async () => {
-    const user = await insertUser('active');
-
-    for (let i = 0; i < 5; i++) {
-      await request(app).post('/api/v1/otp/send').send({ userId: user.id }).expect(202);
-    }
+  test('POST /api/v1/otp/send returns 422 for a deleted user', async () => {
+    const user = await insertUser('deleted');
 
     const response = await request(app)
       .post('/api/v1/otp/send')
-      .send({ userId: user.id })
-      .expect(429);
+      .send({ userId: user.id, purpose: 'ACTIVATION' })
+      .expect(422);
 
-    expect(response.body.errorCode).toBe('OTP_RATE_LIMIT_EXCEEDED');
+    expect(response.body.errorCode).toBe('OTP_ACCOUNT_INELIGIBLE');
+    expect(deliveryPort.dispatched).toHaveLength(0);
+  });
 
-    await redis.del(`otp:rl:${user.id}`);
+  test('POST /api/v1/otp/send returns 202 for a pending user (post-registration activation)', async () => {
+    const user = await insertUser('pending');
+
+    const response = await request(app)
+      .post('/api/v1/otp/send')
+      .send({ userId: user.id, purpose: 'ACTIVATION' })
+      .expect(202);
+
+    expect(response.body).toMatchObject({ status: 'accepted' });
+    expect(deliveryPort.dispatched).toHaveLength(1);
+  });
+
+  test('two sequential requests for same user+purpose leave exactly one ACTIVE row', async () => {
+    const user = await insertUser('active');
+
+    await request(app)
+      .post('/api/v1/otp/send')
+      .send({ userId: user.id, purpose: 'ACTIVATION' })
+      .expect(202);
+
+    await request(app)
+      .post('/api/v1/otp/send')
+      .send({ userId: user.id, purpose: 'ACTIVATION' })
+      .expect(202);
+
+    const rows = db
+      .prepare("SELECT status FROM otp_requests WHERE user_id = ? AND purpose = 'ACTIVATION' ORDER BY created_at ASC")
+      .all(user.id) as Array<{ status: string }>;
+    expect(rows).toHaveLength(2);
+    expect(rows[0].status).toBe('EXPIRED');
+    expect(rows[1].status).toBe('ACTIVE');
+  });
+
+  test('separate purposes can each have an ACTIVE OTP', async () => {
+    const user = await insertUser('active');
+
+    await request(app)
+      .post('/api/v1/otp/send')
+      .send({ userId: user.id, purpose: 'ACTIVATION' })
+      .expect(202);
+
+    await request(app)
+      .post('/api/v1/otp/send')
+      .send({ userId: user.id, purpose: 'PASSWORD_RECOVERY' })
+      .expect(202);
+
+    const activationRow = db
+      .prepare("SELECT status FROM otp_requests WHERE user_id = ? AND purpose = 'ACTIVATION'")
+      .get(user.id) as { status: string };
+    const recoveryRow = db
+      .prepare("SELECT status FROM otp_requests WHERE user_id = ? AND purpose = 'PASSWORD_RECOVERY'")
+      .get(user.id) as { status: string };
+
+    expect(activationRow.status).toBe('ACTIVE');
+    expect(recoveryRow.status).toBe('ACTIVE');
   });
 
   test('never returns the plaintext OTP in the response body, even on dispatch failure', async () => {
@@ -173,86 +213,11 @@ describe('Integration | OTP send and resend', () => {
 
     const response = await request(app)
       .post('/api/v1/otp/send')
-      .send({ userId: user.id })
+      .send({ userId: user.id, purpose: 'ACTIVATION' })
       .expect(202);
 
-    expect(response.body).toEqual({ status: 'dispatch_failed' });
+    expect(response.body).toMatchObject({ status: 'dispatch_failed' });
     const dispatchedCode = deliveryPort.dispatched[0].code;
     expect(JSON.stringify(response.body)).not.toContain(dispatchedCode);
-
-    await redis.del(`otp:rl:${user.id}`);
-  });
-});
-
-describe('Integration | OTP verify', () => {
-  test('POST /api/v1/otp/verify activates a pending user on the correct code', async () => {
-    const user = await insertUser('pending');
-    await request(app).post('/api/v1/otp/send').send({ userId: user.id }).expect(202);
-    const code = deliveryPort.dispatched[deliveryPort.dispatched.length - 1].code;
-
-    const response = await request(app)
-      .post('/api/v1/otp/verify')
-      .send({ userId: user.id, passcode: code })
-      .expect(200);
-
-    expect(response.body).toMatchObject({ userId: user.id });
-
-    const userRow = db
-      .prepare('SELECT status, activated_at FROM users WHERE id = ?')
-      .get(user.id) as { status: string; activated_at: string | null };
-    expect(userRow.status).toBe('active');
-    expect(userRow.activated_at).not.toBeNull();
-
-    const otpRow = db
-      .prepare('SELECT invalidated_at FROM otp_requests WHERE user_id = ?')
-      .get(user.id) as { invalidated_at: string | null };
-    expect(otpRow.invalidated_at).not.toBeNull();
-
-    await redis.del(`otp:rl:${user.id}`);
-  });
-
-  test('POST /api/v1/otp/verify returns 422 for an incorrect code', async () => {
-    const user = await insertUser('pending');
-    await request(app).post('/api/v1/otp/send').send({ userId: user.id }).expect(202);
-
-    const response = await request(app)
-      .post('/api/v1/otp/verify')
-      .send({ userId: user.id, passcode: '000000' })
-      .expect(422);
-
-    expect(response.body.errorCode).toBe('OTP_INVALID');
-
-    await redis.del(`otp:rl:${user.id}`);
-  });
-
-  test('POST /api/v1/otp/verify returns 404 when no OTP has been requested', async () => {
-    const user = await insertUser('pending');
-
-    const response = await request(app)
-      .post('/api/v1/otp/verify')
-      .send({ userId: user.id, passcode: '123456' })
-      .expect(404);
-
-    expect(response.body.errorCode).toBe('OTP_NOT_FOUND');
-  });
-
-  test('POST /api/v1/otp/verify returns 410 for an expired OTP', async () => {
-    const user = await insertUser('pending');
-    await request(app).post('/api/v1/otp/send').send({ userId: user.id }).expect(202);
-    const code = deliveryPort.dispatched[deliveryPort.dispatched.length - 1].code;
-
-    db.prepare('UPDATE otp_requests SET expires_at = ? WHERE user_id = ?').run(
-      new Date(Date.now() - 1000).toISOString(),
-      user.id,
-    );
-
-    const response = await request(app)
-      .post('/api/v1/otp/verify')
-      .send({ userId: user.id, passcode: code })
-      .expect(410);
-
-    expect(response.body.errorCode).toBe('OTP_EXPIRED');
-
-    await redis.del(`otp:rl:${user.id}`);
   });
 });

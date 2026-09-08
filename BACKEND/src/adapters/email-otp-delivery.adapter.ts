@@ -5,15 +5,14 @@
  * existing EmailDeliveryPort / SendGridEmailAdapter, reusing the same
  * transactional-email infrastructure as the registration feature.
  *
- * Delivery is via email rather than SMS for this deployment — see
- * .kiro/specs/otp/tasks.md task 2 deviation note.
+ * Delivery is via email rather than SMS for this deployment.
  *
  * Design rules:
  *  - NEVER throws — provider-level failures are converted to `false`.
  *  - Respects OTP_DELIVERY_ENABLED (env: SMS_PROVIDER_ENABLED) so local/dev
  *    environments can no-op dispatch without needing provider credentials.
  *
- * Requirements: US-002 FR-005, FR-006, FR-013
+ * Requirements: US-001 FR-006, FR-007
  */
 
 import { OtpDeliveryPort } from './otp-delivery.port';
@@ -36,7 +35,7 @@ export class EmailOtpDeliveryAdapter implements OtpDeliveryPort {
         otpConfig.otpEmailTemplateId,
         {
           otp: code,
-          expiry_minutes: String(otpConfig.otpTtlMinutes),
+          expiry_seconds: String(otpConfig.otpExpirySeconds),
           app_name: appConfig.fromName,
         },
       );

@@ -4,7 +4,7 @@
  * Loads OTP-feature configuration from environment variables and exports a
  * strongly-typed `otpConfig` object.
  *
- * Requirements: US-002 FR-002, FR-004, FR-008, FR-011
+ * Requirements: US-001 FR-003, A-001
  */
 
 // ---------------------------------------------------------------------------
@@ -12,14 +12,23 @@
 // ---------------------------------------------------------------------------
 
 export interface OtpConfig {
+  /** Fixed length of the numeric passcode (A-003, assumed 6). */
   otpLength: number;
+  /** OTP validity window in seconds (A-001, not client-supplied). */
+  otpExpirySeconds: number;
+  /** OTP validity window in minutes — legacy alias for account-deletion.config.ts. */
   otpTtlMinutes: number;
-  otpMaxAttemptsPerWindow: number;
-  otpRateLimitWindowMinutes: number;
+  /** bcrypt work factor for hashing OTP codes. */
+  bcryptWorkFactor: number;
+  /** HMAC algorithm for legacy hashing (used by account-deletion.service.ts). */
   otpHashAlgorithm: string;
-  /** Never log or expose this value. */
+  /** HMAC secret for legacy hashing (used by account-deletion.service.ts). */
   otpHashSecret: string;
-  /** Gates whether OtpDeliveryPort actually dispatches (read from SMS_PROVIDER_ENABLED for continuity with task 1; delivery is via email — see task 2/5 deviation notes). */
+  /** Max OTP attempts per rate-limit window. */
+  otpMaxAttemptsPerWindow: number;
+  /** Rate-limit window in minutes. */
+  otpRateLimitWindowMinutes: number;
+  /** Gates whether OtpDeliveryPort actually dispatches (read from SMS_PROVIDER_ENABLED for continuity with task 1; delivery is via email). */
   otpDeliveryEnabled: boolean;
   redisUrl: string;
   otpEmailTemplateId: string;
@@ -66,11 +75,13 @@ function requireEnvString(envKey: string): string {
 // ---------------------------------------------------------------------------
 
 const otpLength = parsePositiveInt('OTP_LENGTH', 6);
-const otpTtlMinutes = parsePositiveInt('OTP_TTL_MINUTES', 10);
+const otpExpirySeconds = parsePositiveInt('OTP_EXPIRY_SECONDS', 300);
+const otpTtlMinutes = Math.max(1, Math.ceil(otpExpirySeconds / 60));
+const bcryptWorkFactor = parsePositiveInt('OTP_BCRYPT_WORK_FACTOR', 10);
+const otpHashAlgorithm = process.env.OTP_HASH_ALGORITHM?.trim() || 'sha256';
+const otpHashSecret = process.env.OTP_HASH_SECRET || 'default-otp-secret';
 const otpMaxAttemptsPerWindow = parsePositiveInt('OTP_MAX_ATTEMPTS_PER_WINDOW', 5);
 const otpRateLimitWindowMinutes = parsePositiveInt('OTP_RATE_LIMIT_WINDOW_MINUTES', 15);
-const otpHashAlgorithm = process.env.OTP_HASH_ALGORITHM?.trim() || 'sha256';
-const otpHashSecret = requireEnvString('OTP_HASH_SECRET');   // ← value intentionally not logged
 const otpDeliveryEnabled = parseBoolean('SMS_PROVIDER_ENABLED', true);
 const redisUrl = process.env.REDIS_URL?.trim() || 'redis://localhost:6379';
 const otpEmailTemplateId = requireEnvString('OTP_EMAIL_TEMPLATE_ID');
@@ -81,11 +92,13 @@ const otpEmailTemplateId = requireEnvString('OTP_EMAIL_TEMPLATE_ID');
 
 export const otpConfig: OtpConfig = Object.freeze({
   otpLength,
+  otpExpirySeconds,
   otpTtlMinutes,
-  otpMaxAttemptsPerWindow,
-  otpRateLimitWindowMinutes,
+  bcryptWorkFactor,
   otpHashAlgorithm,
   otpHashSecret,
+  otpMaxAttemptsPerWindow,
+  otpRateLimitWindowMinutes,
   otpDeliveryEnabled,
   redisUrl,
   otpEmailTemplateId,

@@ -9,9 +9,11 @@ const logger = winston.createLogger({
     winston.format.errors({ stack: true }),
     process.env.NODE_ENV === 'production'
       ? winston.format.json()
-      : winston.format.prettyPrint()
+      : winston.format.prettyPrint(),
   ),
-  transports: [new winston.transports.Console()],
+  transports: [
+    new winston.transports.Console(),
+  ],
 });
 
 module.exports = logger;

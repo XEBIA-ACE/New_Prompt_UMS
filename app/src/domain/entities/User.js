@@ -1,77 +1,64 @@
 'use strict';
 
 /**
- * @typedef {Object} User
+ * @typedef {Object} UserProps
  * @property {string} id
  * @property {string} email
  * @property {string} passwordHash
- * @property {string} firstName
- * @property {string} lastName
+ * @property {string} [firstName]
+ * @property {string} [lastName]
  * @property {boolean} isVerified
- * @property {string|null} otpCode
- * @property {Date|null} otpExpiresAt
+ * @property {boolean} isActive
  * @property {Date} createdAt
  * @property {Date} updatedAt
  */
 
 class User {
   /**
-   * @param {Object} props
-   * @param {string} props.id
-   * @param {string} props.email
-   * @param {string} props.passwordHash
-   * @param {string} props.firstName
-   * @param {string} props.lastName
-   * @param {boolean} [props.isVerified]
-   * @param {string|null} [props.otpCode]
-   * @param {Date|null} [props.otpExpiresAt]
-   * @param {Date} [props.createdAt]
-   * @param {Date} [props.updatedAt]
+   * @param {UserProps} props
    */
-  constructor({
-    id,
-    email,
-    passwordHash,
-    firstName,
-    lastName,
-    isVerified = false,
-    otpCode = null,
-    otpExpiresAt = null,
-    createdAt = new Date(),
-    updatedAt = new Date(),
-  }) {
-    this.id = id;
-    this.email = email;
-    this.passwordHash = passwordHash;
-    this.firstName = firstName;
-    this.lastName = lastName;
-    this.isVerified = isVerified;
-    this.otpCode = otpCode;
-    this.otpExpiresAt = otpExpiresAt;
-    this.createdAt = createdAt;
-    this.updatedAt = updatedAt;
+  constructor(props) {
+    this.id = props.id;
+    this.email = props.email;
+    this.passwordHash = props.passwordHash;
+    this.firstName = props.firstName || null;
+    this.lastName = props.lastName || null;
+    this.isVerified = props.isVerified || false;
+    this.isActive = props.isActive !== undefined ? props.isActive : true;
+    this.createdAt = props.createdAt || new Date();
+    this.updatedAt = props.updatedAt || new Date();
   }
 
   /**
-   * Check whether the OTP is still valid.
-   * @returns {boolean}
+   * Mark the user's email as verified.
+   * @returns {void}
    */
-  isOtpValid() {
-    if (!this.otpCode || !this.otpExpiresAt) return false;
-    return new Date() < new Date(this.otpExpiresAt);
+  verify() {
+    this.isVerified = true;
+    this.updatedAt = new Date();
   }
 
   /**
-   * Return a safe public representation (no secrets).
+   * Soft-delete the user account.
+   * @returns {void}
+   */
+  deactivate() {
+    this.isActive = false;
+    this.updatedAt = new Date();
+  }
+
+  /**
+   * Return a plain object safe for external serialisation (no password hash).
    * @returns {Object}
    */
-  toPublic() {
+  toPublicJSON() {
     return {
       id: this.id,
       email: this.email,
       firstName: this.firstName,
       lastName: this.lastName,
       isVerified: this.isVerified,
+      isActive: this.isActive,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
     };

@@ -5,23 +5,20 @@ const helmet = require('helmet');
 const cors = require('cors');
 const morgan = require('morgan');
 
-const healthRouter = require('./interfaces/http/routes/health.routes');
-const authRouter = require('./interfaces/http/routes/auth.routes');
-const userRouter = require('./interfaces/http/routes/user.routes');
-const errorHandler = require('./interfaces/http/middleware/errorHandler');
-const notFoundHandler = require('./interfaces/http/middleware/notFoundHandler');
+const healthRouter = require('./adapters/http/routes/health.routes');
+const authRouter = require('./adapters/http/routes/auth.routes');
+const userRouter = require('./adapters/http/routes/user.routes');
+const errorHandler = require('./adapters/http/middleware/errorHandler');
+const notFound = require('./adapters/http/middleware/notFound');
 
 const app = express();
 
-// Security & utility middleware
+// Security & parsing middleware
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-if (process.env.NODE_ENV !== 'test') {
-  app.use(morgan('combined'));
-}
+app.use(morgan('combined'));
 
 // Routes
 app.use('/health', healthRouter);
@@ -29,7 +26,7 @@ app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/users', userRouter);
 
 // Error handling
-app.use(notFoundHandler);
+app.use(notFound);
 app.use(errorHandler);
 
 module.exports = app;

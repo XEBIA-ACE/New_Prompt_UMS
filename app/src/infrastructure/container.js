@@ -1,16 +1,20 @@
 'use strict';
 
-const PostgresUserRepository = require('./repositories/PostgresUserRepository');
-const NodemailerEmailService = require('./email/NodemailerEmailService');
-const AuthService = require('../application/services/AuthService');
-const UserService = require('../application/services/UserService');
+/**
+ * Dependency injection container.
+ * Wires concrete adapters to the ports consumed by use-cases and controllers.
+ */
 
-// Adapters
-const userRepository = new PostgresUserRepository();
-const emailService = new NodemailerEmailService();
+const PostgresUserRepository = require('../adapters/repositories/PostgresUserRepository');
+const PostgresOtpRepository = require('../adapters/repositories/PostgresOtpRepository');
+const NodemailerEmailService = require('../adapters/services/NodemailerEmailService');
+const JwtTokenService = require('../adapters/services/JwtTokenService');
 
-// Application services (use-case layer)
-const authService = new AuthService(userRepository, emailService);
-const userService = new UserService(userRepository);
+const container = {
+  userRepository: new PostgresUserRepository(),
+  otpRepository: new PostgresOtpRepository(),
+  emailService: new NodemailerEmailService(),
+  tokenService: new JwtTokenService(),
+};
 
-module.exports = { userRepository, emailService, authService, userService };
+module.exports = container;

@@ -2,24 +2,23 @@
 
 require('dotenv').config();
 
-const app = require('./app');
+const app = require('./adapters/http/app');
+const { connectDB } = require('./infrastructure/db/pool');
 const logger = require('./infrastructure/logger');
-const { connectDB } = require('./infrastructure/database/postgres');
+const config = require('./infrastructure/config');
 
-const PORT = process.env.PORT || 3000;
+const PORT = config.port;
 
-async function bootstrap() {
+(async () => {
   try {
     await connectDB();
     logger.info('Database connection established');
 
     app.listen(PORT, () => {
-      logger.info(`User Management Service running on port ${PORT}`);
+      logger.info(`User Management Service listening on port ${PORT} [${config.nodeEnv}]`);
     });
   } catch (err) {
     logger.error('Failed to start service', { error: err.message });
     process.exit(1);
   }
-}
-
-bootstrap();
+})();

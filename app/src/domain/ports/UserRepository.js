@@ -1,10 +1,10 @@
 'use strict';
 
 /**
- * Port — UserRepository
+ * Port: UserRepository
  *
  * Defines the contract that any persistence adapter must fulfil.
- * Concrete implementations live in src/infrastructure/repositories/.
+ * Concrete implementations live in src/adapters/persistence/.
  */
 class UserRepository {
   /**
@@ -13,49 +13,39 @@ class UserRepository {
    * @returns {Promise<import('../entities/User')>}
    */
   // eslint-disable-next-line no-unused-vars
-  async create(user) {
-    throw new Error('UserRepository.create() not implemented');
-  }
+  async create(user) { throw new Error('Not implemented'); }
 
   /**
-   * Find a user by their unique identifier.
-   * @param {string} id
-   * @returns {Promise<import('../entities/User')|null>}
-   */
-  // eslint-disable-next-line no-unused-vars
-  async findById(id) {
-    throw new Error('UserRepository.findById() not implemented');
-  }
-
-  /**
-   * Find a user by email address.
+   * Find a user by their email address.
    * @param {string} email
    * @returns {Promise<import('../entities/User')|null>}
    */
   // eslint-disable-next-line no-unused-vars
-  async findByEmail(email) {
-    throw new Error('UserRepository.findByEmail() not implemented');
-  }
+  async findByEmail(email) { throw new Error('Not implemented'); }
 
   /**
-   * Persist changes to an existing user.
-   * @param {import('../entities/User')} user
+   * Find a user by their ID.
+   * @param {string} id
+   * @returns {Promise<import('../entities/User')|null>}
+   */
+  // eslint-disable-next-line no-unused-vars
+  async findById(id) { throw new Error('Not implemented'); }
+
+  /**
+   * Mark a user as email-verified.
+   * @param {string} id
    * @returns {Promise<import('../entities/User')>}
    */
   // eslint-disable-next-line no-unused-vars
-  async update(user) {
-    throw new Error('UserRepository.update() not implemented');
-  }
+  async markVerified(id) { throw new Error('Not implemented'); }
 
   /**
-   * Permanently remove a user record.
+   * Soft-delete a user account.
    * @param {string} id
    * @returns {Promise<void>}
    */
   // eslint-disable-next-line no-unused-vars
-  async delete(id) {
-    throw new Error('UserRepository.delete() not implemented');
-  }
+  async softDelete(id) { throw new Error('Not implemented'); }
 }
 
 module.exports = UserRepository;

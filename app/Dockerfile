@@ -1,4 +1,4 @@
-# ── Build stage ──────────────────────────────────────────────────────────────
+# ── Build stage ───────────────────────────────────────────────
 FROM node:20-alpine AS builder
 
 WORKDIR /app
@@ -6,24 +6,23 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
 
-# ── Runtime stage ─────────────────────────────────────────────────────────────
+COPY src ./src
+
+# ── Runtime stage ─────────────────────────────────────────────
 FROM node:20-alpine AS runtime
+
+ENV NODE_ENV=production
+
+WORKDIR /app
 
 # Non-root user for security
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
-WORKDIR /app
-
-# Copy production dependencies from builder
 COPY --from=builder /app/node_modules ./node_modules
-
-# Copy application source
-COPY src/ ./src/
+COPY --from=builder /app/src ./src
 COPY package.json ./
 
-# Ensure correct ownership
 RUN chown -R appuser:appgroup /app
-
 USER appuser
 
 EXPOSE 3000

@@ -1,12 +1,10 @@
 'use strict';
 
-const container = require('../../../infrastructure/container');
-const { DomainError } = require('../../../domain/errors');
+const jwt = require('jsonwebtoken');
+const config = require('../../../infrastructure/config');
 
 /**
- * JWT authentication middleware.
- * Attaches decoded payload to req.user on success.
- *
+ * Middleware: verify Bearer JWT and attach decoded payload to req.user.
  * @param {import('express').Request}  req
  * @param {import('express').Response} res
  * @param {import('express').NextFunction} next
@@ -14,17 +12,16 @@ const { DomainError } = require('../../../domain/errors');
 function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'Missing or malformed Authorization header.' });
+    return res.status(401).json({ error: 'Missing or invalid Authorization header' });
   }
 
-  const token = authHeader.split(' ')[1];
+  const token = authHeader.slice(7);
   try {
-    const payload = container.tokenService.verifyAccessToken(token);
+    const payload = jwt.verify(token, config.jwt.secret);
     req.user = payload;
     next();
-  } catch (err) {
-    if (err instanceof DomainError) return next(err);
-    return res.status(401).json({ message: 'Invalid or expired token.' });
+  } catch {
+    return res.status(401).json({ error: 'Invalid or expired token' });
   }
 }
 

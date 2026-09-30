@@ -1,49 +1,33 @@
-version: '3.9'
+version: "3.9"
 
 services:
   app:
     build: .
     ports:
-      - '3000:3000'
-    environment:
-      NODE_ENV: development
-      PORT: 3000
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: user_management
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      JWT_SECRET: change_me_in_production
-      JWT_EXPIRES_IN: 1d
-      SMTP_HOST: mailhog
-      SMTP_PORT: 1025
-      EMAIL_FROM: no-reply@example.com
+      - "3000:3000"
+    env_file:
+      - .env
     depends_on:
-      postgres:
+      db:
         condition: service_healthy
     restart: unless-stopped
 
-  postgres:
-    image: postgres:15-alpine
+  db:
+    image: postgres:16-alpine
     environment:
-      POSTGRES_DB: user_management
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - '5432:5432'
+      POSTGRES_DB: ${DB_NAME:-user_management}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./src/infrastructure/db/migrations:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 5
-
-  mailhog:
-    image: mailhog/mailhog:latest
     ports:
-      - '1025:1025'   # SMTP
-      - '8025:8025'   # Web UI
+      - "5432:5432"
 
 volumes:
   pgdata:

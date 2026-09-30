@@ -3,9 +3,7 @@
 const { validationResult } = require('express-validator');
 
 /**
- * Middleware that checks express-validator results and short-circuits with 422
- * if any validation errors are present.
- *
+ * Middleware: collect express-validator errors and short-circuit with 422.
  * @param {import('express').Request}  req
  * @param {import('express').Response} res
  * @param {import('express').NextFunction} next

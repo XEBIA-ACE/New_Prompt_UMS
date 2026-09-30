@@ -1,10 +1,5 @@
-node_modules
-npm-debug.log*
+node_modules/
+dist/
+coverage/
 .env
-.env.*
-!.env.example
-coverage
-.nyc_output
 *.log
-dist
-.DS_Store

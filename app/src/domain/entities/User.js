@@ -1,66 +1,42 @@
 'use strict';
 
 /**
- * @typedef {Object} UserProps
- * @property {string} id
- * @property {string} email
- * @property {string} passwordHash
- * @property {string} [firstName]
- * @property {string} [lastName]
- * @property {boolean} isVerified
- * @property {boolean} isActive
- * @property {Date} createdAt
- * @property {Date} updatedAt
+ * User domain entity.
+ * Plain data object — no framework dependencies.
  */
-
 class User {
   /**
-   * @param {UserProps} props
+   * @param {object} props
+   * @param {string} props.id
+   * @param {string} props.email
+   * @param {string} props.passwordHash
+   * @param {boolean} props.isVerified
+   * @param {Date}   props.createdAt
+   * @param {Date}   props.updatedAt
+   * @param {Date|null} props.deletedAt
    */
-  constructor(props) {
-    this.id = props.id;
-    this.email = props.email;
-    this.passwordHash = props.passwordHash;
-    this.firstName = props.firstName || null;
-    this.lastName = props.lastName || null;
-    this.isVerified = props.isVerified || false;
-    this.isActive = props.isActive !== undefined ? props.isActive : true;
-    this.createdAt = props.createdAt || new Date();
-    this.updatedAt = props.updatedAt || new Date();
+  constructor({ id, email, passwordHash, isVerified, createdAt, updatedAt, deletedAt = null }) {
+    this.id = id;
+    this.email = email;
+    this.passwordHash = passwordHash;
+    this.isVerified = isVerified;
+    this.createdAt = createdAt;
+    this.updatedAt = updatedAt;
+    this.deletedAt = deletedAt;
   }
 
-  /**
-   * Mark the user's email as verified.
-   * @returns {void}
-   */
-  verify() {
-    this.isVerified = true;
-    this.updatedAt = new Date();
+  /** @returns {boolean} */
+  isDeleted() {
+    return this.deletedAt !== null;
   }
 
-  /**
-   * Soft-delete the user account.
-   * @returns {void}
-   */
-  deactivate() {
-    this.isActive = false;
-    this.updatedAt = new Date();
-  }
-
-  /**
-   * Return a plain object safe for external serialisation (no password hash).
-   * @returns {Object}
-   */
-  toPublicJSON() {
+  /** Safe public representation (no password hash). */
+  toPublic() {
     return {
       id: this.id,
       email: this.email,
-      firstName: this.firstName,
-      lastName: this.lastName,
       isVerified: this.isVerified,
-      isActive: this.isActive,
       createdAt: this.createdAt,
-      updatedAt: this.updatedAt,
     };
   }
 }

@@ -3,6 +3,7 @@ import { LandingTemplate }           from "./components/templates/LandingTemplat
 import { RegistrationTemplate }      from "./components/templates/RegistrationTemplate";
 import { OtpVerificationTemplate }   from "./components/templates/OtpVerificationTemplate";
 import { LoginTemplate }             from "./components/templates/LoginTemplate";
+import { ResetPasswordTemplate }     from "./components/templates/ResetPasswordTemplate";
 import { DashboardTemplate }         from "./components/templates/DashboardTemplate";
 import { AccountDashboardTemplate }  from "./components/templates/AccountDashboardTemplate";
 import { AccountDeletionTemplate }   from "./components/templates/AccountDeletionTemplate";
@@ -13,6 +14,7 @@ export const router = createBrowserRouter([
   { path: "/register",        Component: RegistrationTemplate     },
   { path: "/verify-otp",      Component: OtpVerificationTemplate  },
   { path: "/login",           Component: LoginTemplate            },
+  { path: "/reset-password",  Component: ResetPasswordTemplate    },
   {
     Component: RequireAuth,
     children: [

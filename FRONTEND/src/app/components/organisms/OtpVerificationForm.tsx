@@ -86,15 +86,21 @@ export function OtpVerificationForm({ email, userId }: OtpVerificationFormProps)
       }
 
       setOtp("");
-      switch (result.body.errorCode) {
+      switch (result.body.error_code) {
         case "OTP_EXPIRED":
           setError("This code has expired. Please request a new one.");
           break;
         case "OTP_NOT_FOUND":
           setError("No active code was found. Please request a new one.");
           break;
-        case "OTP_INVALID":
+        case "INVALID_PASSCODE":
           setError("The code you entered is incorrect. Please try again.");
+          break;
+        case "OTP_LOCKED":
+          setError("Too many incorrect attempts. Please request a new code.");
+          break;
+        case "ACCOUNT_STATE_INVALID":
+          setError("This account can't be verified. Please contact support.");
           break;
         default:
           setError("Something went wrong verifying your code. Please try again.");

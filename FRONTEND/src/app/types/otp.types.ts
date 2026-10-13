@@ -4,9 +4,24 @@ export interface VerifyOtpRequest {
 }
 
 export interface VerifyOtpSuccessResponse {
+  outcome: "success";
+  error_code: null;
   message: string;
   userId: string;
   activatedAt: string;
+}
+
+export interface VerifyOtpErrorResponse {
+  outcome: "failure";
+  error_code:
+    | "MISSING_REQUIRED_FIELD"
+    | "INVALID_PASSCODE"
+    | "OTP_LOCKED"
+    | "ACCOUNT_STATE_INVALID"
+    | "OTP_NOT_FOUND"
+    | "OTP_EXPIRED"
+    | "INTERNAL_ERROR";
+  message: string;
 }
 
 export interface OtpErrorResponse {

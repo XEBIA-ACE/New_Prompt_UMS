@@ -195,7 +195,7 @@ describe('Integration | OTP verify', () => {
       .send({ userId: user.id, passcode: code })
       .expect(200);
 
-    expect(response.body).toMatchObject({ userId: user.id });
+    expect(response.body).toMatchObject({ outcome: 'success', error_code: null, userId: user.id });
 
     const userRow = db
       .prepare('SELECT status, activated_at FROM users WHERE id = ?')
@@ -220,9 +220,20 @@ describe('Integration | OTP verify', () => {
       .send({ userId: user.id, passcode: '000000' })
       .expect(422);
 
-    expect(response.body.errorCode).toBe('OTP_INVALID');
+    expect(response.body).toMatchObject({ outcome: 'failure', error_code: 'INVALID_PASSCODE' });
 
     await redis.del(`otp:rl:${user.id}`);
+  });
+
+  test.each([
+    ['missing passcode (S3-AC1)', { userId: 'user-x' }],
+    ['missing userId (S3-AC1)', { passcode: '123456' }],
+    ['non-numeric passcode (S3-AC2)', { userId: 'user-x', passcode: 'abcdef' }],
+    ['passcode longer than 8 digits (S3-AC2)', { userId: 'user-x', passcode: '123456789' }],
+  ])('POST /api/v1/otp/verify returns 400 MISSING_REQUIRED_FIELD for %s', async (_label, body) => {
+    const response = await request(app).post('/api/v1/otp/verify').send(body).expect(400);
+
+    expect(response.body).toMatchObject({ outcome: 'failure', error_code: 'MISSING_REQUIRED_FIELD' });
   });
 
   test('POST /api/v1/otp/verify returns 404 when no OTP has been requested', async () => {
@@ -233,7 +244,7 @@ describe('Integration | OTP verify', () => {
       .send({ userId: user.id, passcode: '123456' })
       .expect(404);
 
-    expect(response.body.errorCode).toBe('OTP_NOT_FOUND');
+    expect(response.body).toMatchObject({ outcome: 'failure', error_code: 'OTP_NOT_FOUND' });
   });
 
   test('POST /api/v1/otp/verify returns 410 for an expired OTP', async () => {
@@ -251,7 +262,7 @@ describe('Integration | OTP verify', () => {
       .send({ userId: user.id, passcode: code })
       .expect(410);
 
-    expect(response.body.errorCode).toBe('OTP_EXPIRED');
+    expect(response.body).toMatchObject({ outcome: 'failure', error_code: 'OTP_EXPIRED' });
 
     await redis.del(`otp:rl:${user.id}`);
   });

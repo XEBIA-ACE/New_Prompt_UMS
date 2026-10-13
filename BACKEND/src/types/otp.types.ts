@@ -58,3 +58,29 @@ export interface OtpRateLimitResult {
   allowed: boolean;
   attemptsRemaining: number;
 }
+
+// ---------------------------------------------------------------------------
+// Verification response contract
+// ---------------------------------------------------------------------------
+
+/**
+ * Body returned by POST /api/v1/otp/verify. Every response carries `outcome`
+ * and `error_code`; `error_code` is null on success.
+ *
+ * Requirements: S3-AC6, S3-AC7 / FR-006, FR-007
+ */
+export interface OtpVerifySuccessBody {
+  outcome: 'success';
+  error_code: null;
+  message: string;
+  userId: string;
+  activatedAt: Date;
+}
+
+export interface OtpVerifyFailureBody {
+  outcome: 'failure';
+  error_code: string;
+  message: string;
+}
+
+export type OtpVerifyResponseBody = OtpVerifySuccessBody | OtpVerifyFailureBody;

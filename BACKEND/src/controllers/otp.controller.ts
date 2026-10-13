@@ -15,17 +15,20 @@
  *   malformed body              -> 400
  *   unexpected                  -> 500
  *
- * Response mapping (verify):
- *   success                     -> 200 { message, userId, activatedAt }
+ * Response mapping (verify) — body is always { outcome, error_code, message, ... }:
+ *   success                     -> 200 outcome='success', error_code=null
+ *   missing/invalid field       -> 400 MISSING_REQUIRED_FIELD
+ *   OtpInvalidError             -> 422 INVALID_PASSCODE
+ *   OtpLockedError              -> 409 OTP_LOCKED
+ *   OtpAccountStateInvalidError -> 422 ACCOUNT_STATE_INVALID
  *   OtpNotFoundError            -> 404 OTP_NOT_FOUND
  *   OtpExpiredError             -> 410 OTP_EXPIRED
- *   OtpInvalidError             -> 422 OTP_INVALID
- *   malformed body              -> 400
- *   unexpected                  -> 500
+ *   unexpected                  -> 500 INTERNAL_ERROR
  *
  * The plaintext OTP is never returned in any response.
  *
- * Requirements: US-002 FR-011, FR-012, FR-013; US-005 FR-001–012
+ * Requirements: US-002 FR-011, FR-012, FR-013; US-005 FR-001–012;
+ *   S3-AC1..S3-AC7 (story 560cb07c-55f3-542f-a90f-918fd47e5379)
  */
 
 import { Request, Response } from 'express';
@@ -33,10 +36,12 @@ import { OtpService } from '../services/otp.service';
 import {
   OtpForbiddenError,
   OtpRateLimitExceededError,
-  OtpNotFoundError,
-  OtpExpiredError,
-  OtpInvalidError,
+  OtpVerificationErrorCode,
+  mapOtpVerificationError,
 } from '../errors/otp.errors';
+import { OtpVerifyFailureBody, OtpVerifySuccessBody } from '../types/otp.types';
+
+const PASSCODE_PATTERN = /^\d{4,8}$/;
 
 export class OtpController {
   constructor(private readonly otpService: OtpService) {}
@@ -57,47 +62,72 @@ export class OtpController {
 
   /**
    * Handle POST /api/v1/otp/verify
+   *
+   * Every response body carries `outcome` and `error_code` (S3-AC7 / FR-007).
    */
   async verifyOtp(req: Request, res: Response): Promise<void> {
-    const userId = req.body.userId as string | undefined;
-    const passcode = req.body.passcode as string | undefined;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const userId = body.userId;
+    const passcode = body.passcode;
 
-    if (!userId || typeof userId !== 'string' || userId.trim() === '') {
-      res.status(400).json({ error: 'userId is required.' });
+    // S3-AC1 / FR-001
+    if (typeof userId !== 'string' || userId.trim() === '') {
+      this.sendVerifyFailure(res, 400, OtpVerificationErrorCode.MISSING_REQUIRED_FIELD, 'userId is required.');
       return;
     }
 
-    if (!passcode || typeof passcode !== 'string' || passcode.trim() === '') {
-      res.status(400).json({ error: 'passcode is required.' });
+    if (typeof passcode !== 'string' || passcode.trim() === '') {
+      this.sendVerifyFailure(res, 400, OtpVerificationErrorCode.MISSING_REQUIRED_FIELD, 'passcode is required.');
+      return;
+    }
+
+    // S3-AC2 / FR-002
+    if (!PASSCODE_PATTERN.test(passcode.trim())) {
+      this.sendVerifyFailure(
+        res,
+        400,
+        OtpVerificationErrorCode.MISSING_REQUIRED_FIELD,
+        'passcode must be a 4-8 digit string.',
+      );
       return;
     }
 
     try {
       const result = await this.otpService.verifyOtp(userId.trim(), passcode.trim());
-      res.status(200).json({
+      // S3-AC6 / FR-006
+      const successBody: OtpVerifySuccessBody = {
+        outcome: 'success',
+        error_code: null,
         message: 'Account activated successfully.',
         userId: result.userId,
         activatedAt: result.activatedAt,
-      });
+      };
+      res.status(200).json(successBody);
     } catch (err) {
-      if (err instanceof OtpNotFoundError) {
-        res.status(404).json({ errorCode: 'OTP_NOT_FOUND', message: err.message });
+      // S3-AC3, S3-AC4, S3-AC5 / FR-003, FR-004, FR-005
+      const failure = mapOtpVerificationError(err);
+      if (failure.errorCode === OtpVerificationErrorCode.INTERNAL_ERROR) {
+        console.error('[OtpController] Unexpected error during verification:', err);
+        this.sendVerifyFailure(
+          res,
+          failure.status,
+          failure.errorCode,
+          'An unexpected error occurred while verifying the OTP.',
+        );
         return;
       }
-
-      if (err instanceof OtpExpiredError) {
-        res.status(410).json({ errorCode: 'OTP_EXPIRED', message: err.message });
-        return;
-      }
-
-      if (err instanceof OtpInvalidError) {
-        res.status(422).json({ errorCode: 'OTP_INVALID', message: err.message });
-        return;
-      }
-
-      console.error('[OtpController] Unexpected error during verification:', err);
-      res.status(500).json({ error: 'An unexpected error occurred while verifying the OTP.' });
+      this.sendVerifyFailure(res, failure.status, failure.errorCode, (err as Error).message);
     }
+  }
+
+  private sendVerifyFailure(
+    res: Response,
+    status: number,
+    errorCode: OtpVerificationErrorCode,
+    message: string,
+  ): void {
+    const failureBody: OtpVerifyFailureBody = { outcome: 'failure', error_code: errorCode, message };
+    res.status(status).json(failureBody);
   }
 
   private async handle(

@@ -7,6 +7,7 @@ import type {
   OtpErrorResponse,
   ResendOtpRequest,
   ResendOtpSuccessResponse,
+  VerifyOtpErrorResponse,
   VerifyOtpRequest,
   VerifyOtpSuccessResponse,
 } from "../types/otp.types";
@@ -66,8 +67,8 @@ export async function registerUser(
 
 export async function verifyOtp(
   payload: VerifyOtpRequest
-): Promise<ApiResult<VerifyOtpSuccessResponse, OtpErrorResponse>> {
-  return postJson<VerifyOtpSuccessResponse, OtpErrorResponse>("/api/v1/otp/verify", payload);
+): Promise<ApiResult<VerifyOtpSuccessResponse, VerifyOtpErrorResponse>> {
+  return postJson<VerifyOtpSuccessResponse, VerifyOtpErrorResponse>("/api/v1/otp/verify", payload);
 }
 
 export async function resendOtp(

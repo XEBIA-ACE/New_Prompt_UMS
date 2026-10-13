@@ -16,6 +16,11 @@ import type {
   LoginSuccessResponse,
 } from "../types/login.types";
 import type {
+  ResetPasswordErrorResponse,
+  ResetPasswordRequest,
+  ResetPasswordSuccessResponse,
+} from "../types/password-reset.types";
+import type {
   CancelDeletionErrorResponse,
   CancelDeletionSuccessResponse,
   ConfirmDeletionErrorResponse,
@@ -80,6 +85,15 @@ export async function loginUser(
   payload: LoginRequest
 ): Promise<ApiResult<LoginSuccessResponse, LoginErrorResponse>> {
   return postJson<LoginSuccessResponse, LoginErrorResponse>("/api/v1/auth/login", payload);
+}
+
+export async function resetPassword(
+  payload: ResetPasswordRequest
+): Promise<ApiResult<ResetPasswordSuccessResponse, ResetPasswordErrorResponse>> {
+  return postJson<ResetPasswordSuccessResponse, ResetPasswordErrorResponse>(
+    "/api/v1/auth/password-reset",
+    payload
+  );
 }
 
 export async function logoutUser(token: string): Promise<void> {

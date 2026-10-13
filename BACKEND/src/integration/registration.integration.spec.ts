@@ -246,6 +246,6 @@ describe('Integration | Registration and activation', () => {
       .send({ userId, passcode: code })
       .expect(410);
 
-    expect(verifyResponse.body.errorCode).toBe('OTP_EXPIRED');
+    expect(verifyResponse.body).toMatchObject({ outcome: 'failure', error_code: 'OTP_EXPIRED' });
   });
 });

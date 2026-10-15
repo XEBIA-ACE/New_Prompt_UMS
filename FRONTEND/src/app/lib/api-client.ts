@@ -23,7 +23,13 @@ import type {
   RequestDeletionErrorResponse,
   RequestDeletionSuccessResponse,
 } from "../types/deletion.types";
-import type { ProfileErrorResponse, UserProfileResponse } from "../types/profile.types";
+import type {
+  ProfileDetailsResponse,
+  ProfileErrorResponse,
+  UpdateProfileErrorResponse,
+  UpdateProfileRequest,
+  UserProfileResponse,
+} from "../types/profile.types";
 
 // Empty string = same-origin relative URLs (all call paths already start with
 // /api/...): in Kubernetes/docker the nginx in this image and the ALB route
@@ -163,4 +169,35 @@ export async function getCurrentUser(
   token: string
 ): Promise<ApiResult<UserProfileResponse, ProfileErrorResponse>> {
   return authRequest<UserProfileResponse, ProfileErrorResponse>("/api/v1/users/me", "GET", token);
+}
+
+/* US-004: the caller's own editable profile (self-only; identity comes from the session token). */
+export async function getProfile(
+  token: string
+): Promise<ApiResult<ProfileDetailsResponse, UpdateProfileErrorResponse>> {
+  return authRequest<ProfileDetailsResponse, UpdateProfileErrorResponse>("/api/user/profile", "GET", token);
+}
+
+export async function updateProfile(
+  token: string,
+  csrfToken: string,
+  payload: UpdateProfileRequest
+): Promise<ApiResult<ProfileDetailsResponse, UpdateProfileErrorResponse>> {
+  const response = await fetch(`${API_BASE_URL}/api/user/profile`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "X-CSRF-Token": csrfToken,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const body = await response.json();
+
+  if (response.ok) {
+    return { ok: true, data: body as ProfileDetailsResponse };
+  }
+
+  return { ok: false, status: response.status, body: body as UpdateProfileErrorResponse };
 }

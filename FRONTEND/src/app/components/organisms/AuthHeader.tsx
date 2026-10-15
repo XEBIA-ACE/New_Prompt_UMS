@@ -122,7 +122,7 @@ export function AuthHeader({ userName = "Jane Smith", userEmail = "jane@example.
                 </div>
                 {/* Menu items */}
                 {[
-                  { icon: User,   label: "Profile", href: "#" },
+                  { icon: User,   label: "Profile", href: "/profile" },
                 ].map(({ icon: Icon, label, href }) => (
                   <a
                     key={label}

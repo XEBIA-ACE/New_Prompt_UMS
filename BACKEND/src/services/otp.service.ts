@@ -27,8 +27,10 @@ import { IOtpRequestRepository } from '../repositories/otp-request.repository';
 import { RateLimitGuard } from './rate-limit.guard';
 import { OtpDeliveryPort } from '../adapters/otp-delivery.port';
 import { OtpDispatchResult } from '../types/otp.types';
+import { UserEntity } from '../types/registration.types';
 import {
   OtpForbiddenError,
+  OtpAccountStateInvalidError,
   OtpRateLimitExceededError,
   OtpNotFoundError,
   OtpExpiredError,
@@ -76,6 +78,16 @@ function hashOtpCode(code: string): string {
     .digest('hex');
 }
 
+/**
+ * Account states eligible for the OTP flows. Both freshly-registered
+ * ('pending') and already-verified ('active') accounts qualify — 'pending'
+ * covers post-registration activation, 'active' covers any future login
+ * step-up/re-verification use. 'suspended' (locked) and 'deleted' do not.
+ */
+function isOtpEligibleStatus(status: UserEntity['status']): boolean {
+  return status === 'active' || status === 'pending';
+}
+
 // ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
@@ -100,14 +112,20 @@ export class DefaultOtpService implements OtpService {
   /**
    * Verify a submitted OTP code and, on success, activate the user's account.
    *
-   * @throws OtpNotFoundError - no active (non-invalidated) OTP exists for the user.
+   * @throws OtpNotFoundError            - the user does not exist, or no active
+   *                                       (non-invalidated) OTP exists for the user.
+   * @throws OtpAccountStateInvalidError - the account is suspended (locked) or deleted.
    * @throws OtpExpiredError  - the active OTP's expiry has passed.
    * @throws OtpInvalidError  - the submitted code does not match.
    */
   async verifyOtp(userId: string, passcode: string): Promise<OtpVerifyResult> {
     const user = await this.userRepository.findById(userId);
-    if (user === null || (user.status !== 'pending' && user.status !== 'active')) {
+    if (user === null) {
       throw new OtpNotFoundError(userId);
+    }
+
+    if (!isOtpEligibleStatus(user.status)) {
+      throw new OtpAccountStateInvalidError(userId, user.status);
     }
 
     const request = await this.otpRequestRepository.findActiveByUserId(userId);
@@ -147,7 +165,7 @@ export class DefaultOtpService implements OtpService {
    * Shared send/resend implementation — see file-level doc comment for the
    * full rule sequence.
    *
-   * @throws OtpForbiddenError         - account is not active.
+   * @throws OtpForbiddenError         - account is not pending/active.
    * @throws OtpRateLimitExceededError - too many attempts within the window.
    */
   private async issueOtp(userId: string): Promise<OtpDispatchResult> {
@@ -158,10 +176,7 @@ export class DefaultOtpService implements OtpService {
       return { accepted: true, status: 'delivered' };
     }
 
-    // Both freshly-registered ('pending') and already-verified ('active')
-    // accounts may request an OTP — 'pending' covers post-registration
-    // activation, 'active' covers any future login step-up/re-verification use.
-    if (user.status !== 'active' && user.status !== 'pending') {
+    if (!isOtpEligibleStatus(user.status)) {
       throw new OtpForbiddenError(userId, user.status);
     }
 

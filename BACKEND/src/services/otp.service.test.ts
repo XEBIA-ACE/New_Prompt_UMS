@@ -9,6 +9,7 @@ import { RateLimitGuard } from './rate-limit.guard';
 import { OtpDeliveryPort } from '../adapters/otp-delivery.port';
 import {
   OtpForbiddenError,
+  OtpAccountStateInvalidError,
   OtpRateLimitExceededError,
   OtpNotFoundError,
   OtpExpiredError,
@@ -236,12 +237,42 @@ describe('DefaultOtpService', () => {
       expect(mockDb.transaction).not.toHaveBeenCalled();
     });
 
-    test('throws OtpNotFoundError when the user does not exist or is not pending/active', async () => {
+    test('throws OtpNotFoundError when the user does not exist', async () => {
       userRepository.findById.mockResolvedValue(null);
 
       await expect(service.verifyOtp('user-1', '654321')).rejects.toBeInstanceOf(OtpNotFoundError);
       expect(otpRequestRepository.findActiveByUserId).not.toHaveBeenCalled();
     });
+
+    // S5-AC1 (locked = 'suspended'), S5-AC2 (deleted)
+    test.each(['suspended', 'deleted'] as const)(
+      'throws OtpAccountStateInvalidError for a %s account even with a valid code',
+      async (status) => {
+        userRepository.findById.mockResolvedValue(buildUser({ status }));
+        otpRequestRepository.findActiveByUserId.mockResolvedValue(buildOtpRequest());
+
+        const promise = service.verifyOtp('user-1', '654321');
+
+        await expect(promise).rejects.toBeInstanceOf(OtpAccountStateInvalidError);
+        await expect(promise).rejects.toMatchObject({ userId: 'user-1', accountStatus: status });
+        expect(otpRequestRepository.findActiveByUserId).not.toHaveBeenCalled();
+        expect(mockDb.transaction).not.toHaveBeenCalled();
+      },
+    );
+
+    // S5-AC3 (active), S5-AC4 (pending/unverified)
+    test.each(['active', 'pending'] as const)(
+      'verifies a correct code for a %s account without rejecting on account state',
+      async (status) => {
+        userRepository.findById.mockResolvedValue(buildUser({ status }));
+        otpRequestRepository.findActiveByUserId.mockResolvedValue(buildOtpRequest());
+
+        const result = await service.verifyOtp('user-1', '654321');
+
+        expect(result.userId).toBe('user-1');
+        expect(mockDb.transaction).toHaveBeenCalled();
+      },
+    );
 
     test('throws OtpExpiredError when the OTP has expired', async () => {
       userRepository.findById.mockResolvedValue(buildUser({ status: 'pending' }));

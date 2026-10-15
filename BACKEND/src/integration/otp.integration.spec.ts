@@ -39,7 +39,7 @@ function randomSuffix(): string {
   return Math.random().toString(36).slice(2, 10);
 }
 
-function insertUser(status: 'pending' | 'active' | 'suspended'): { id: string; email: string } {
+function insertUser(status: 'pending' | 'active' | 'suspended' | 'deleted'): { id: string; email: string } {
   const suffix = randomSuffix();
   const email = `${suffix}@example.test`;
   const id = uuidv4();
@@ -231,6 +231,66 @@ describe('Integration | OTP verify', () => {
     const response = await request(app)
       .post('/api/v1/otp/verify')
       .send({ userId: user.id, passcode: '123456' })
+      .expect(404);
+
+    expect(response.body.errorCode).toBe('OTP_NOT_FOUND');
+  });
+
+  // S5-AC1 (locked = 'suspended'), S5-AC2 (deleted)
+  test.each(['suspended', 'deleted'] as const)(
+    'POST /api/v1/otp/verify returns 422 ACCOUNT_STATE_INVALID for a %s account with a valid code',
+    async (status) => {
+      const user = await insertUser('pending');
+      await request(app).post('/api/v1/otp/send').send({ userId: user.id }).expect(202);
+      const code = deliveryPort.dispatched[deliveryPort.dispatched.length - 1].code;
+      db.prepare('UPDATE users SET status = ? WHERE id = ?').run(status, user.id);
+
+      const response = await request(app)
+        .post('/api/v1/otp/verify')
+        .send({ userId: user.id, passcode: code })
+        .expect(422);
+
+      expect(response.body).toMatchObject({
+        errorCode: 'ACCOUNT_STATE_INVALID',
+        outcome: 'account_state_invalid',
+      });
+      expect(JSON.stringify(response.body)).not.toContain(code);
+
+      const userRow = db
+        .prepare('SELECT status, activated_at FROM users WHERE id = ?')
+        .get(user.id) as { status: string; activated_at: string | null };
+      expect(userRow.status).toBe(status);
+      expect(userRow.activated_at).toBeNull();
+
+      const otpRow = db
+        .prepare('SELECT invalidated_at FROM otp_requests WHERE user_id = ?')
+        .get(user.id) as { invalidated_at: string | null };
+      expect(otpRow.invalidated_at).toBeNull();
+
+      await redis.del(`otp:rl:${user.id}`);
+    },
+  );
+
+  // S5-AC3 (active); S5-AC4 (pending) is covered by the activation test above
+  test('POST /api/v1/otp/verify returns 200 for an active user on the correct code', async () => {
+    const user = await insertUser('active');
+    await request(app).post('/api/v1/otp/send').send({ userId: user.id }).expect(202);
+    const code = deliveryPort.dispatched[deliveryPort.dispatched.length - 1].code;
+
+    const response = await request(app)
+      .post('/api/v1/otp/verify')
+      .send({ userId: user.id, passcode: code })
+      .expect(200);
+
+    expect(response.body).toMatchObject({ userId: user.id });
+
+    await redis.del(`otp:rl:${user.id}`);
+  });
+
+  test('POST /api/v1/otp/verify returns 404 OTP_NOT_FOUND for an unknown user', async () => {
+    const response = await request(app)
+      .post('/api/v1/otp/verify')
+      .send({ userId: uuidv4(), passcode: '123456' })
       .expect(404);
 
     expect(response.body.errorCode).toBe('OTP_NOT_FOUND');

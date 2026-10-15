@@ -18,6 +18,7 @@
  * Response mapping (verify):
  *   success                     -> 200 { message, userId, activatedAt }
  *   OtpNotFoundError            -> 404 OTP_NOT_FOUND
+ *   OtpAccountStateInvalidError -> 422 ACCOUNT_STATE_INVALID (suspended/deleted)
  *   OtpExpiredError             -> 410 OTP_EXPIRED
  *   OtpInvalidError             -> 422 OTP_INVALID
  *   malformed body              -> 400
@@ -34,6 +35,7 @@ import {
   OtpForbiddenError,
   OtpRateLimitExceededError,
   OtpNotFoundError,
+  OtpAccountStateInvalidError,
   OtpExpiredError,
   OtpInvalidError,
 } from '../errors/otp.errors';
@@ -82,6 +84,15 @@ export class OtpController {
     } catch (err) {
       if (err instanceof OtpNotFoundError) {
         res.status(404).json({ errorCode: 'OTP_NOT_FOUND', message: err.message });
+        return;
+      }
+
+      if (err instanceof OtpAccountStateInvalidError) {
+        res.status(422).json({
+          errorCode: 'ACCOUNT_STATE_INVALID',
+          outcome: 'account_state_invalid',
+          message: err.message,
+        });
         return;
       }
 

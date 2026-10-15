@@ -38,6 +38,19 @@ export class OtpForbiddenError extends Error {
   }
 }
 
+export class OtpAccountStateInvalidError extends Error {
+  public readonly userId: string;
+  public readonly accountStatus: string;
+
+  constructor(userId: string, accountStatus: string) {
+    super('The account is not in a state that permits OTP verification.');
+    this.name = 'OtpAccountStateInvalidError';
+    this.userId = userId;
+    this.accountStatus = accountStatus;
+    Object.setPrototypeOf(this, OtpAccountStateInvalidError.prototype);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Dispatch failures
 // ---------------------------------------------------------------------------

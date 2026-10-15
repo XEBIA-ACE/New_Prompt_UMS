@@ -157,6 +157,45 @@ paths:
         "403": { description: OTP_FORBIDDEN — user not found or not active }
         "429": { description: OTP_RATE_LIMIT_EXCEEDED }
         "500": { description: Unexpected error }
+  /api/v1/otp/verify:
+    post:
+      tags: [OTP]
+      summary: Verify a one-time code and activate the account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, passcode]
+              properties:
+                userId: { type: string, format: uuid }
+                passcode: { type: string }
+      responses:
+        "200":
+          description: Verified; account activated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  userId: { type: string, format: uuid }
+                  activatedAt: { type: string, format: date-time }
+        "400": { description: Missing userId or passcode }
+        "404": { description: OTP_NOT_FOUND — user not found or no active OTP }
+        "410": { description: OTP_EXPIRED }
+        "422":
+          description: OTP_INVALID — incorrect code; or ACCOUNT_STATE_INVALID — account is suspended (locked) or deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errorCode: { type: string, enum: [OTP_INVALID, ACCOUNT_STATE_INVALID] }
+                  outcome: { type: string, enum: [account_state_invalid], description: Present only for ACCOUNT_STATE_INVALID }
+                  message: { type: string }
+        "500": { description: Unexpected error }
 
   /api/v1/auth/login:
     post:

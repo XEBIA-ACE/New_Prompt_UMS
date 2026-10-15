@@ -13,6 +13,7 @@ import { createAuthRouter } from './routes/auth.routes';
 import { createPasswordRouter } from './routes/password.routes';
 import { createDeletionRouter } from './routes/deletion.routes';
 import { createUserProfileRouter } from './routes/user-profile.routes';
+import { createProfileRouter } from './routes/profile.routes';
 import { createHealthRouter } from './routes/health.routes';
 import { OtpDeliveryPort } from './adapters/otp-delivery.port';
 import { EmailDeliveryPort } from './adapters/email-delivery.port';
@@ -204,6 +205,10 @@ export function createApp(
   // GET /api/v1/users/me — the calling user's own profile, reusing the same
   // session-validation guard as the deletion-request routes above.
   app.use('/api/v1/users', createUserProfileRouter(db, sharedSessionService));
+
+  // US-004: GET/PUT /api/user/profile — view and edit the caller's own
+  // profile (session-guarded, per-user rate limited, CSRF-checked on PUT).
+  app.use('/api/user', createProfileRouter(db, redis, sharedSessionService));
 
   // /health is intentionally unauthenticated (API Gateway probing).
   app.use(createHealthRouter(db));

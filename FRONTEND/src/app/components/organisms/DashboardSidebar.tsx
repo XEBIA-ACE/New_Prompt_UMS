@@ -16,7 +16,7 @@ const NAV_ITEMS: SidebarItem[] = [
   { icon: BarChart2,       label: "Reports",       href: "#" },
   { icon: LineChart,       label: "Analytics",     href: "#" },
   { icon: Settings,        label: "Settings",      href: "#" },
-  { icon: UserCircle,      label: "Profile",       href: "#" },
+  { icon: UserCircle,      label: "Profile",       href: "/profile" },
 ];
 
 interface DashboardSidebarProps {

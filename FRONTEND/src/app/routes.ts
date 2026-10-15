@@ -6,6 +6,7 @@ import { LoginTemplate }             from "./components/templates/LoginTemplate"
 import { DashboardTemplate }         from "./components/templates/DashboardTemplate";
 import { AccountDashboardTemplate }  from "./components/templates/AccountDashboardTemplate";
 import { AccountDeletionTemplate }   from "./components/templates/AccountDeletionTemplate";
+import { ProfileTemplate }           from "./components/templates/ProfileTemplate";
 import { RequireAuth }               from "./components/RequireAuth";
 
 export const router = createBrowserRouter([
@@ -19,6 +20,7 @@ export const router = createBrowserRouter([
       { path: "/dashboard",         Component: DashboardTemplate        },
       { path: "/account-dashboard", Component: AccountDashboardTemplate },
       { path: "/delete-account",    Component: AccountDeletionTemplate  },
+      { path: "/profile",           Component: ProfileTemplate          },
     ],
   },
 ]);

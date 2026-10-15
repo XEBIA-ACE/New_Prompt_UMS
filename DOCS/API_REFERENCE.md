@@ -139,6 +139,37 @@ Returns the calling user's own profile, including their current active-session c
   | 404 | `USER_NOT_FOUND` | the session's owning user record no longer exists |
   | 500 | — | unexpected |
 
+## GET /api/user/profile  (US-004)
+
+Returns the caller's own profile for the Profile page. Self-only: the profile is resolved from the session, there is no user-id parameter. Records a `profile.viewed` audit entry (`user_profile_audit_log`). Response has `Cache-Control: no-store`.
+
+- **Auth**: `Authorization: Bearer <session token>`
+- **Rate limit**: per user, `PROFILE_RATE_LIMIT_MAX_REQUESTS` (default 60) per `PROFILE_RATE_LIMIT_WINDOW_SECONDS` (default 60), shared with PUT → 429 `RATE_LIMITED` + `Retry-After`
+- **Success — 200**: `{ "username": "string", "email": "string", "displayName": "string"|null, "phoneNumber": "string"|null, "status": "pending"|"active"|"suspended"|"deleted", "registrationTimestamp": "ISO-8601", "lastLoginAt": "ISO-8601"|null, "profileUpdatedAt": "ISO-8601"|null, "version": number, "csrfToken": "string" }`
+- **Errors**: session-middleware 401s; 404 `USER_NOT_FOUND`; 429 `RATE_LIMITED`; 500
+
+## PUT /api/user/profile  (US-004)
+
+Replaces the caller's editable profile fields (`displayName`, `email`, `phoneNumber`). `username`, `status` and timestamps are read-only.
+
+- **Auth**: `Authorization: Bearer <session token>` **and** `X-CSRF-Token: <csrfToken from GET>` (HMAC of the session token; a token from another session is rejected)
+- **Body**: `{ "displayName": "string"|null, "email": "string", "phoneNumber": "string"|null, "version": number }` — any other key (e.g. `userId`, `username`) → 422
+- **Validation**: displayName ≤ 100 chars, no `<`, `>` or control chars; email required, ≤ 254 chars, valid format, unique; phoneNumber optional, 7–15 digits, optional leading `+`, separators ` ( ) . -`; `version` positive integer. Values are trimmed; empty optional values become `null`.
+- **Concurrency**: optimistic locking — `version` must equal the stored `profile_version`; success increments it.
+- **Side effects (single transaction)**: row update, `profile.updated` audit entry with changed field **names** (no values), `user.profile.updated` event row in `domain_event_outbox` with payload `{ eventId, topic, occurredAt, userId, profileVersion, changedFields }`. A submission with no changes is a no-op (no version bump/audit/event).
+- **Success — 200**: same shape as GET (new `version`, `profileUpdatedAt`)
+- **Errors**:
+  | Status | error_code | Cause |
+  |---|---|---|
+  | 401 | session-middleware codes | missing/invalid session |
+  | 403 | `CSRF_TOKEN_INVALID` | missing or wrong `X-CSRF-Token` |
+  | 404 | `USER_NOT_FOUND` | session user no longer exists |
+  | 409 | `PROFILE_VERSION_CONFLICT` (+ `currentVersion`) | profile changed since it was loaded |
+  | 409 | `EMAIL_ALREADY_IN_USE` (+ `fieldErrors.email`) | email belongs to another account |
+  | 422 | `PROFILE_VALIDATION_FAILED` (+ `fieldErrors`) | invalid/unknown fields |
+  | 429 | `RATE_LIMITED` | per-user rate limit exceeded |
+  | 500 | — | unexpected |
+
 ## POST /api/v1/users/deletion-requests
 
 Requests self-service account deletion; queues a confirmation email.

@@ -285,6 +285,68 @@ paths:
         "410": { description: TOKEN_EXPIRED or TOKEN_CONSUMED }
         "500": { description: Unexpected error }
 
+  /api/user/profile:
+    get:
+      tags: [Profile]
+      summary: "US-004: view the caller's own profile (self-only)"
+      description: >
+        Returns the session user's profile plus a session-bound `csrfToken`
+        required by PUT. Records a `profile.viewed` audit entry. Per-user rate
+        limited (PROFILE_RATE_LIMIT_MAX_REQUESTS per PROFILE_RATE_LIMIT_WINDOW_SECONDS).
+      security: [{ SessionBearer: [] }]
+      responses:
+        "200":
+          description: Current profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProfileDetails" }
+        "401": { description: Session-middleware rejection }
+        "404": { description: USER_NOT_FOUND }
+        "429": { description: RATE_LIMITED (Retry-After header set) }
+        "500": { description: Unexpected error }
+    put:
+      tags: [Profile]
+      summary: "US-004: update the caller's own editable profile fields"
+      description: >
+        Full replacement of the editable fields. Unknown or read-only fields
+        (e.g. userId, username, status) are rejected. Uses optimistic locking
+        via `version`. On success writes a `profile.updated` audit entry
+        (changed field names only) and enqueues a `user.profile.updated`
+        event in `domain_event_outbox` in the same transaction.
+      security: [{ SessionBearer: [] }]
+      parameters:
+        - in: header
+          name: X-CSRF-Token
+          required: true
+          schema: { type: string }
+          description: The `csrfToken` returned by GET/PUT /api/user/profile for this session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, version]
+              properties:
+                displayName: { type: string, nullable: true, maxLength: 100 }
+                email: { type: string, format: email, maxLength: 254 }
+                phoneNumber: { type: string, nullable: true, description: "7-15 digits; optional leading +; spaces ( ) . - allowed" }
+                version: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProfileDetails" }
+        "401": { description: Session-middleware rejection }
+        "403": { description: CSRF_TOKEN_INVALID }
+        "404": { description: USER_NOT_FOUND }
+        "409": { description: PROFILE_VERSION_CONFLICT (+ currentVersion) or EMAIL_ALREADY_IN_USE (+ fieldErrors.email) }
+        "422": { description: PROFILE_VALIDATION_FAILED (+ fieldErrors) }
+        "429": { description: RATE_LIMITED (Retry-After header set) }
+        "500": { description: Unexpected error }
+
 components:
   securitySchemes:
     SessionBearer:
@@ -295,3 +357,17 @@ components:
       type: http
       scheme: bearer
       description: Static ADMIN_BEARER_TOKEN configured via env var
+  schemas:
+    ProfileDetails:
+      type: object
+      properties:
+        username: { type: string, readOnly: true }
+        email: { type: string, format: email }
+        displayName: { type: string, nullable: true }
+        phoneNumber: { type: string, nullable: true }
+        status: { type: string, enum: [pending, active, suspended, deleted], readOnly: true }
+        registrationTimestamp: { type: string, format: date-time, readOnly: true }
+        lastLoginAt: { type: string, format: date-time, nullable: true, readOnly: true }
+        profileUpdatedAt: { type: string, format: date-time, nullable: true, readOnly: true }
+        version: { type: integer, description: Optimistic-lock version to echo back on PUT }
+        csrfToken: { type: string, description: Session-bound token for the X-CSRF-Token header }

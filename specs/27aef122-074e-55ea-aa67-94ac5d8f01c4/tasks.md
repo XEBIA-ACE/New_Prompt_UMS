@@ -1,0 +1,14 @@
+# Tasks: 27aef122-074e-55ea-aa67-94ac5d8f01c4
+
+- [ ] T001 FR-001: Given a POST /api/v1/otp/verify request with a valid UUID user_id and valid passcode, when the account is in locked state, then the controller returns HTTP 422 with error_code ACCOUNT_STATE_INVALID and outcome field indicating account state is invalid.
+- [ ] T002 FR-002: Given a POST /api/v1/otp/verify request with a valid UUID user_id and valid passcode, when the account is in deleted state, then the controller returns HTTP 422 with error_code ACCOUNT_STATE_INVALID and outcome field indicating account state is invalid.
+- [ ] T003 FR-003: Given a POST /api/v1/otp/verify request with a valid UUID user_id and valid passcode, when the account is in active state and OTP is valid, then the controller proceeds with OTP verification and does not reject based on account state.
+- [ ] T004 FR-004: Given a POST /api/v1/otp/verify request with a valid UUID user_id and valid passcode, when the account is in pending/unverified state and OTP is valid, then the controller proceeds with OTP verification and does not reject based on account state.
+- [ ] T005 FR-005: Given a POST /api/v1/otp/verify request, when the account state validation logic is called, then it uses the existing account state enum and validation method from the user service or repository without creating new validation logic.
+- [ ] T006 Verify S5-AC1: Given a POST /api/v1/otp/verify request with a valid UUID user_id and valid passcode, when the account is in locked state, then the controller returns HTTP 422 with error_code ACCOUNT_STATE_INVALID and outcome field indicating account state is invalid.
+- [ ] T007 Verify S5-AC2: Given a POST /api/v1/otp/verify request with a valid UUID user_id and valid passcode, when the account is in deleted state, then the controller returns HTTP 422 with error_code ACCOUNT_STATE_INVALID and outcome field indicating account state is invalid.
+- [ ] T008 Verify S5-AC3: Given a POST /api/v1/otp/verify request with a valid UUID user_id and valid passcode, when the account is in active state and OTP is valid, then the controller proceeds with OTP verification and does not reject based on account state.
+- [ ] T009 Verify S5-AC4: Given a POST /api/v1/otp/verify request with a valid UUID user_id and valid passcode, when the account is in pending/unverified state and OTP is valid, then the controller proceeds with OTP verification and does not reject based on account state.
+- [ ] T010 Verify S5-AC5: Given a POST /api/v1/otp/verify request, when the account state validation logic is called, then it uses the existing account state enum and validation method from the user service or repository without creating new validation logic.
+- [ ] T011 Verify IMPACT: Update existing tests to expect 422 for locked/deleted accounts.
+- [ ] T012 Verify IMPACT: Add new test cases for each account state scenario (locked, deleted, active, pending/unverified).

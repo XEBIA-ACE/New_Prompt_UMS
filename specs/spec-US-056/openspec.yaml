@@ -1,0 +1,115 @@
+openspec: '1.0'
+story:
+  id: US-056
+  title: Design Desktop Registration Interface
+  description: ''
+  feature:
+    id: F-01
+    title: User Registration
+  epic:
+    id: EP-001
+    title: Design User Registration Interface
+  status: draft
+functional_requirement:
+  description: "## S-101\n\n### Key words MUST, MUST NOT, SHALL, SHALL NOT, SHOULD,\
+    \ SHOULD NOT, MAY, and OPTIONAL in this document are to be interpreted as described\
+    \ in RFC 2119.\n\n---\n\n### Purpose\nDesign the desktop registration interface\
+    \ for the User Management Service to facilitate user onboarding through effective\
+    \ data collection and validation processes.\n\n### Scope\nThis specification covers\
+    \ the desktop user registration functionality within the User Management Service,\
+    \ focusing on data input, validation, and error handling.\n\n### Non-Goals\n1.\
+    \ Implementing password recovery features.\n2. Integrating third-party authentication\
+    \ systems.\n3. Designing mobile or web interfaces.\n4. Detailing underlying system\
+    \ architectures.\n5. Providing usage analytics.\n6. Implementing UI aesthetics\
+    \ or animations.\n7. Managing user sessions.\n8. Supporting multi-language registration\
+    \ forms.\n9. Handling user data exports.\n10. Detailing compliance with specific\
+    \ regulations (e.g., GDPR).\n\n### Key Entities\n- **User**: \n  - Attributes:\
+    \ `username (string)`, `password (string)`, `email (string)`, `phone (string)`\n\
+    \  - Relationships: None\n\n### Functional Requirements\n\nFR-001: User Management\
+    \ Service MUST display a registration form with fields for username, password,\
+    \ email, and phone.\n\nFR-002: User Management Service MUST validate that the\
+    \ username is unique and alphanumeric.\n\nFR-003: User Management Service MUST\
+    \ validate that the password is at least 8 characters long and contains a mix\
+    \ of letters, numbers, and symbols.\n\nFR-004: User Management Service MUST validate\
+    \ that the email is in a correct format and not previously registered.\n\nFR-005:\
+    \ User Management Service MUST validate that the phone number is numerical and\
+    \ matches the format [NEEDS CLARIFICATION: Provide phone format] (Assumed: Format\
+    \ is \"+CountryCode-Number\").\n\nFR-006: User Management Service SHOULD provide\
+    \ real-time feedback on form validation errors.\n\nFR-007: User Management Service\
+    \ MUST submit validated registration data to the user registration handler for\
+    \ processing.\n\nFR-008: User Management Service MUST display an error message\
+    \ if registration fails due to server-side validation issues.\n\nFR-009: User\
+    \ Management Service SHOULD guide users to retry with corrected inputs if submission\
+    \ initially fails.\n\nFR-010: User Management Service MUST integrate with Authentication\
+    \ Service for OTP validation to confirm user email or phone.\n\n### Assumptions\
+    \ Propagation\nA-001: Registration is limited to desktop interfaces for this specification.\
+    \ (Applies to: FR-001)\n\n### Success Criteria\n\nSC-001: Registration completion\
+    \ success rate equals 95% or greater.\n\nSC-002: 90% of form validation feedback\
+    \ provided in real-time.\n\n### Priority Levels\n- P1: FR-001, FR-002, FR-003,\
+    \ FR-004, FR-007, FR-010\n- P2: FR-008, FR-009\n- P3: FR-005, FR-006\n\n### Edge\
+    \ Cases\n\nEC-001: Given a long username, when user enters more than 20 characters,\
+    \ then system MUST reject input and prompt correct length.\n\nEC-002: Given a\
+    \ previously registered email, when user attempts to register, then system MUST\
+    \ reject and prompt for a different email.\n\nEC-003: Given a weak password, when\
+    \ user attempts to submit form, then system MUST display password strength feedback.\n\
+    \nEC-004: Given an invalid phone format, when user enters incorrect format, then\
+    \ system MUST display real-time validation error.\n\n### Independent Testability\n\
+    Preconditions: Registration page loaded; user access to email and phone verification.\n\
+    User Action: Enter valid registration data and submit form.\nObservable Outcome:\
+    \ User receives OTP for verification and account creation confirmation message."
+  acceptance_criteria: []
+  epic_acceptance_criteria: []
+technical_design:
+  description: "## S-101\n\nKey words MUST, MUST NOT, SHALL, SHALL NOT, SHOULD, SHOULD\
+    \ NOT, MAY, and OPTIONAL in this document are to be interpreted as described in\
+    \ RFC 2119.\n\n---\n\n### Contracts & Interfaces\n\n1. **API Contract**: Registration\
+    \ Endpoint\n   - **Method**: `POST`\n   - **Path**: `/api/v1/user/register`\n\
+    \   - **Request Body Schema**:\n     - `username`: string, required, max length\
+    \ 20\n     - `password`: string, required, min length 8, must contain letters,\
+    \ numbers, symbols\n     - `email`: string, required, valid email format\n   \
+    \  - `phone`: string, required, format \"+CountryCode-Number\"\n   - **Response\
+    \ Codes**:\n     - `201 Created`: Registration successful\n     - `400 Bad Request`:\
+    \ Input validation failed\n     - `409 Conflict`: Username/email already exists\n\
+    \     - `500 Internal Server Error`: Server-side failure\n\n2. **Database Schema**:\n\
+    \   - **Table**: `Users`\n     - `userId`: UUID, Primary Key\n     - `username`:\
+    \ VARCHAR(20), Unique Index\n     - `passwordHash`: VARCHAR(64)\n     - `email`:\
+    \ VARCHAR(255), Unique Index\n     - `phone`: VARCHAR(15)\n   - **Indexes**:\n\
+    \     - `username_index` on `username`\n     - `email_index` on `email`\n\n###\
+    \ Test Strategy\n\n1. **Unit Tests**:\n   - Validate `username` length and uniqueness.\n\
+    \   - Validate `password` complexity and length.\n   - Validate `email` format\
+    \ and uniqueness.\n   - Validate `phone` format.\n\n2. **Integration Tests**:\n\
+    \   - Scenario: New user registration with valid inputs. Expected: `201 Created`.\n\
+    \   - Scenario: Registration with existing username/email. Expected: `409 Conflict`.\n\
+    \   - Scenario: Invalid email format. Expected: `400 Bad Request`.\n\n3. **Edge\
+    \ Case Tests**:\n   - Long username rejection (FR-001 validation).\n   - Weak\
+    \ password rejection (FR-003 validation).\n   - Invalid phone format (FR-005 validation).\n\
+    \n### Implementation Approach\n\n1. **Core Implementation**:\n   - **Class**:\
+    \ `UserController`\n     - **Method**: `registerUser(Request req)`\n       - Validate\
+    \ inputs using `ValidatorService`.\n       - Hash password using `PasswordHasherService`.\n\
+    \       - Persist user data using `UserRepository`.\n\n   - **Class**: `ValidatorService`\n\
+    \     - **Method**: `validateUsername(String username)`\n       - Check alphanumeric\
+    \ and uniqueness.\n     - **Method**: `validatePassword(String password)`\n  \
+    \     - Check length and complexity requirements.\n     - **Method**: `validateEmail(String\
+    \ email)`\n       - Validate format and check uniqueness.\n     - **Method**:\
+    \ `validatePhone(String phone)`\n       - Validate against `\"+CountryCode-Number\"\
+    ` pattern.\n\n2. **Inter-Service Calls**:\n   - **OTP Generation & Validation**:\n\
+    \     - **Endpoint**: POST `/api/v1/user/otp/send`\n     - **Endpoint**: POST\
+    \ `/api/v1/user/otp/verify`\n\n3. **Async Patterns**:\n   - Consider using message\
+    \ queues for event publishing when a user registers successfully to trigger downstream\
+    \ processes like welcome emails.\n\n### ADR-001: User Registration Data Validation\n\
+    \n**Context**: Consistent data validation methods are critical due to security\
+    \ and integrity concerns.\n\n**Decision**: Use centralized `ValidatorService`\
+    \ to manage input validation logic.\n\n**Rationale**: Centralization simplifies\
+    \ testing and future modifications.\n\n**Alternative Considered**: Validate inline\
+    \ in `UserController` and rejected due to code duplication and maintenance issues.\n\
+    \n### Affected Services and API Changes\n\n- **User Management Service**: Addition\
+    \ of `/api/v1/user/register` endpoint.\n- **Authentication Service**: Unchanged\
+    \ but referenced for OTP integration.\n\n### Simplicity Gate Assessment\n\n- **Appropriate**:\
+    \ Each FR is directly addressed by one or more technical components. The architecture\
+    \ uses current service patterns to map directly to functional requirements without\
+    \ unnecessary abstractions.\n\n### Context Recap\n\n- **Service**: User Management\
+    \ Service\n- **Existing Endpoints**: 7\n- **Functional Requirements Supported**:\
+    \ FR-001 to FR-010"
+  affected_services: []
+  api_changes: []
+gaps: []

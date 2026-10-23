@@ -1,0 +1,110 @@
+openspec: '1.0'
+story:
+  id: US-033
+  title: Notification Upon Account Deletion
+  description: ''
+  feature:
+    id: F-04
+    title: Account Deletion
+  epic:
+    id: EP-004
+    title: Automated Recovery Options Post Account Deletion
+  status: draft
+functional_requirement:
+  description: "## S-101\n\n### Purpose\n\nThis specification defines how the User\
+    \ Management Service MUST notify users when their accounts are deleted, enhancing\
+    \ transparency and user communication.\n\n### Scope\n\nThe specification covers\
+    \ the notification process associated with user account deletion within the User\
+    \ Management Service. It involves user notification generation and dispatch post-account\
+    \ deletion.\n\n### Non-Goals\n\n1. Implementing account deletion logic.\n2. Notification\
+    \ content personalization.\n3. Multi-language support for notifications.\n4. Notification\
+    \ medium customization.\n5. Deletion data auditing.\n6. Integration with external\
+    \ notification services.\n7. User authentication processes.\n8. Account creation\
+    \ flows.\n9. Non-deletion notification types.\n10. Notification delivery confirmation\
+    \ tracking.\n\n### Key Entities\n\n- **UserAccount**: \n  - Attributes: \n   \
+    \ - userId (String)\n    - email (String)\n    - deletionDate (DateTime)\n  -\
+    \ Relationships:\n    - n/a\n\n- **Notification**: \n  - Attributes:\n    - message\
+    \ (String)\n    - timestamp (DateTime)\n  - Related Entity:\n    - UserAccount\
+    \ (1:1)\n\n### Functional Requirements\n\n- **FR-001**: User Management Service\
+    \ MUST send a notification to the user's registered email address upon account\
+    \ deletion.\n- **FR-002**: User Management Service MUST include account deletion\
+    \ date in the notification message.\n- **FR-003**: User Management Service SHOULD\
+    \ send notifications within a fixed time after account deletion.\n- **FR-004**:\
+    \ User Management Service MUST NOT send notifications for accounts deleted if\
+    \ there’s no associated email.\n- **FR-005**: User Management Service SHOULD log\
+    \ notification details for auditing purposes.\n- **FR-006**: User Management Service\
+    \ MUST verify existence of an email address before attempting delivery.\n\n###\
+    \ Assumptions Propagation\n\n- **A-001**: Email is the sole method for notification\
+    \ delivery. (Affects FR-001, FR-004)\n- **A-002**: Notifications must be logged\
+    \ for at least 90 days for audit purposes. (Affects FR-005)\n\n### Success Criteria\n\
+    \n- **SC-001**: Notification delivery success rate at least 95%.\n- **SC-002**:\
+    \ Notification sent within 10 minutes of account deletion greater than 90%.\n\
+    - **SC-003**: Logged notifications retained for at least 90 days equals true.\n\
+    \n### Priority Levels\n\n- **FR-001**: P1\n- **FR-002**: P1\n- **FR-003**: P2\n\
+    - **FR-004**: P1\n- **FR-005**: P3\n- **FR-006**: P1\n\n### Edge Cases\n\n- **EC-001**:\
+    \ Given a user account marked for deletion without an email, when the deletion\
+    \ is processed, then no notification should be attempted.\n- **EC-002**: Given\
+    \ a network failure when sending an email notification, when retrying the operation,\
+    \ then the notification should be re-queued and logged.\n\n### Independent Testability\n\
+    \n**Test Scenario**: \n- Preconditions: An account is marked for deletion and\
+    \ has an associated email.\n- User Action: Deletion process is triggered.\n- Observable\
+    \ Outcome: A notification email is dispatched to the user, logged, and the notification\
+    \ contains the correct deletion date/timestamp.\n\n### Context\n\n- **Service**:\
+    \ User Management Service\n- **Story**: Notification Upon Account Deletion\n-\
+    \ **Feature**: Account Deletion\n\nKey words MUST, MUST NOT, SHALL, SHALL NOT,\
+    \ SHOULD, SHOULD NOT, MAY, and OPTIONAL in this document are to be interpreted\
+    \ as described in RFC 2119."
+  acceptance_criteria: []
+  epic_acceptance_criteria: []
+technical_design:
+  description: "## S-101\n\nKey words MUST, MUST NOT, SHALL, SHALL NOT, SHOULD, SHOULD\
+    \ NOT, MAY, and OPTIONAL in this document are to be interpreted as described in\
+    \ RFC 2119.\n\n### Contracts & Interfaces\n\n#### New Endpoint\n- **POST /api/v1/notifications/account-deleted**\n\
+    \  - **Purpose**: To handle the dispatch of account deletion notifications.\n\
+    \  - **Request Parameters**: \n    - `userId` (String, REQUIRED): Identifier for\
+    \ the user whose account was deleted.\n    - `email` (String, REQUIRED): Email\
+    \ address to send the notification to.\n    - `deletionDate` (DateTime, REQUIRED):\
+    \ Timestamp of when the account was deleted.\n  - **Response**:\n    - **200 OK**:\
+    \ Notification dispatched successfully.\n    - **400 Bad Request**: Validation\
+    \ error, such as missing email.\n    - **500 Internal Server Error**: Unexpected\
+    \ error during processing.\n\n#### Database Schema\n- **Table**: `NotificationsLog`\n\
+    \  - **Columns**:\n    - `logId` (UUID, Primary Key)\n    - `userId` (String,\
+    \ Foreign Key on `UserAccount.userId`)\n    - `timestamp` (DateTime, Index)\n\
+    \    - `status` (String)\n  - **Indexes**:\n    - `idx_timestamp`: On `timestamp`\
+    \ for retrieval within a date range.\n\n### Test Strategy\n\n- **Test Case TC-001**:\
+    \ Verify that the endpoint returns `200 OK` when valid data is provided, confirming\
+    \ FR-001 and FR-002.\n- **Test Case TC-002**: Validate that a notification is\
+    \ not sent and an appropriate error is returned (`400 Bad Request`) when email\
+    \ is missing, confirming FR-004.\n- **Test Case TC-003**: Confirm that notifications\
+    \ sent are logged into `NotificationsLog`, validating FR-005.\n- **Test Case TC-004**:\
+    \ Ensure retry logic is operational on network failure per EC-002, logging failure\
+    \ with corresponding status in `NotificationsLog`.\n\n### Implementation Approach\n\
+    \n#### Core Logic Classes\n- **Class**: `NotificationService`\n  - **Method**:\
+    \ `sendAccountDeletedNotification(UserAccount userAccount)`\n    - **Logic**:\n\
+    \      1. Verify email presence (FR-006).\n      2. Construct notification message\
+    \ containing `deletionDate`.\n      3. Use `EmailService.sendEmail()` to dispatch\
+    \ notification.\n      4. Log success or failure to `NotificationsLog` (A-002).\n\
+    \      5. Returns a status indicating success, retry, or failure.\n\n- **Class**:\
+    \ `EmailService`\n  - **Method**: `sendEmail(String email, String message)`\n\
+    \    - **Logic**:\n      1. Attempt to send the email.\n      2. On failure, queue\
+    \ for retry using a background job processor compliant with EC-002.\n  \n####\
+    \ Inter-Service Calls and Async Patterns\n- **Producer**: NotificationService\
+    \ SHALL act as a producer by queuing failed notifications in `FailedEmailsQueue`.\n\
+    - **Consumer**: A background job, named `EmailRetryWorker`, SHALL consume from\
+    \ `FailedEmailsQueue`, re-attempting email dispatch and updating `NotificationsLog`\
+    \ accordingly.\n\n#### Architectural Decision Records (ADRs)\n\n- **ADR-001: Email\
+    \ Notification Handling Using In-House Service**\n  - **Context**: Need to dispatch\
+    \ user notifications via email upon account deletion.\n  - **Decision**: Use an\
+    \ in-house `EmailService` for sending notifications.\n  - **Rationale**: Ensures\
+    \ control over data privacy and auditing; aligns with A-001.\n  - **Alternative**:\
+    \ Third-party email service (rejected due to dependency and compliance risks).\n\
+    \n#### Simplicity Gate Assessment\n- **Rating**: `appropriate`\n  - Each data\
+    \ element and service function directly maps to at least one functional requirement\
+    \ (FR-001 to FR-006), ensuring no unnecessary complexity.\n\n### Affected Services\
+    \ and API Changes\n\n- **Affected Service**: User Management Service\n- **Changes**:\n\
+    \  - Introduction of `/api/v1/notifications/account-deleted` endpoint.\n  - Back-end\
+    \ modifications involving `NotificationsLog` table creation and notification queuing\
+    \ processes."
+  affected_services: []
+  api_changes: []
+gaps: []

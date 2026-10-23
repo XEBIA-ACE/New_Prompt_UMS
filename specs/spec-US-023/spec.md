@@ -1,0 +1,198 @@
+# Implement Verification Step Before Account Deletion
+
+| | |
+|---|---|
+| **ID** | US-023 |
+| **Feature** | F-04 — Account Deletion |
+| **Epic** | EP-001 — User-Initiated Account Deletion Workflow |
+| **Status** | Draft |
+| **Date** | 2026-07-02 |
+
+## Background
+
+Part of feature *Account Deletion*.
+
+## Acceptance Criteria
+
+### Story
+
+- [ ] (none)
+
+### Epic
+
+- [ ] (none)
+
+## Proposed Solution
+
+### Functional Specification
+
+## S-101
+
+### Purpose
+This specification describes the implementation of a verification step users must complete before deleting their accounts to prevent unauthorized deletions and ensure user consent.
+
+### Scope
+This document covers the modification of the User Management Service to introduce a verification step in the account deletion process, impacting how account deletions are processed and verified.
+
+### Non-Goals
+1. Implement alternative deletion methods
+2. Describe the technical implementation of verification flow
+3. Alter existing email or OTP systems
+4. Replace current authentication mechanisms
+5. Detail user interface changes
+
+### Key Entities
+- **UserAccount**: {id: UUID, status: string, email: string}
+- **VerificationToken**: {token: string, userId: UUID, expiresAt: datetime}
+
+### Functional Requirements
+- **FR-001**: The User Management Service MUST initiate a verification process before executing an account deletion request.
+- **FR-002**: The User Management Service MUST generate a VerificationToken associated with the UserAccount initiating the deletion.
+- **FR-003**: The VerificationToken MUST be unique and time-limited, expiring within a predetermined period.
+- **FR-004**: The User Management Service MUST send a verification request to the user prompting them to confirm the deletion.
+- **FR-005**: The User Management Service SHALL NOT proceed with account deletion if the verification step is not completed successfully within the token validity period.
+- **FR-006**: The User Management Service MUST validate the VerificationToken before completing the account deletion.
+- **FR-007**: The User Management Service MUST reject account deletion if the token validation fails or the token is expired.
+
+### Assumptions
+- **A-001**: Verification is assumed to use email as the primary medium for sending verification links. (Cross-Reference: FR-004, FR-006)
+
+### Success Criteria
+- **SC-001**: Number of unauthorized account deletions equals zero post-implementation.
+- **SC-002**: At least 95% of verification requests result in successful account deletion or cancellation.
+
+### Priority Levels
+- **P1**: FR-001, FR-002, FR-004, FR-006
+- **P2**: FR-003, FR-005, FR-007
+
+### Edge Cases
+- **EC-001**: Given a valid token, when a user attempts deletion, then the system confirms the action and deletes the account.
+- **EC-002**: Given an expired token, when a user attempts verification, then the system rejects the deletion attempt with a token expiry notification.
+- **EC-003**: Given a duplicate deletion request, when processed, then the system rejects it if another is already in process.
+
+### Independent Testability
+- **Preconditions**: User is logged in, has a valid account
+- **User Action**: Initiate account deletion and respond to verification email
+- **Outcome**: Account is successfully deleted or cancellation is confirmed
+
+### Context
+This functional specification addresses the addition of a verification step to bolster security around the account deletion process in the User Management Service. It requires users to explicitly confirm their intention by interacting with a validation token, ensuring that only authorized deletions are executed.
+
+### Technical Design
+
+## S-101
+
+Key words MUST, MUST NOT, SHALL, SHALL NOT, SHOULD, SHOULD NOT, MAY, and OPTIONAL in this document are to be interpreted as described in RFC 2119.
+
+### Contracts & Interfaces
+
+#### API Endpoints
+
+1. **POST /api/v1/users/request-deletion**
+   - **Description**: Initiates account deletion and sends a verification token via email.
+   - **Request Payload**: 
+     - `userId`: UUID of the user requesting deletion
+   - **Response Codes**:
+     - `202 Accepted`: Verification token sent
+     - `400 Bad Request`: Invalid `userId`
+     - `404 Not Found`: `userId` does not exist
+
+2. **POST /api/v1/users/verify-deletion**
+   - **Description**: Verifies the deletion request using the token.
+   - **Request Payload**:
+     - `token`: Verification token received in email
+   - **Response Codes**:
+     - `200 OK`: Token verified, account deletion in progress
+     - `400 Bad Request`: Invalid or malformed token
+     - `404 Not Found`: Token does not exist
+     - `410 Gone`: Token expired
+
+#### Data Schema
+
+1. **VerificationToken Table**
+   - `token`: VARCHAR(36) PRIMARY KEY
+   - `userId`: UUID FOREIGN KEY REFERENCES UserAccount(id)
+   - `expiresAt`: DATETIME
+   - **Indexes**:
+     - `idx_userId_token`: Composite index on `userId`, `token`
+
+### Test Strategy
+
+1. **Test Case: Initiate Account Deletion Request**
+   - **Test**: POST /api/v1/users/request-deletion
+   - **Validations**:
+     - Confirm `202 Accepted` on valid `userId`
+     - Confirm entry in `VerificationToken` table
+
+2. **Test Case: Verify Deletion with Token**
+   - **Test**: POST /api/v1/users/verify-deletion
+   - **Validations**:
+     - Confirm `200 OK` with valid token
+     - Confirm account status change in `UserAccount`
+
+3. **Test Case: Attempt Verification with Invalid Token**
+   - **Test**: POST /api/v1/users/verify-deletion
+   - **Validations**:
+     - Confirm `404 Not Found` for unknown token
+     - Confirm `410 Gone` if token expired
+
+### Implementation Approach
+
+#### Core Implementation Logic
+
+- **Class**: `DeletionRequestHandler`
+  - **Method**: `initiateDeletion(userId: UUID)`
+    - Generates a `VerificationToken`
+    - Inserts `VerificationToken` into the database
+    - Sends an email with the token to `UserAccount.email`
+
+- **Class**: `TokenVerificationHandler`
+  - **Method**: `verifyToken(token: String)`
+    - Validates token against `VerificationToken` table
+    - Checks for token expiry
+    - Deletes the user account upon successful verification
+    
+#### Inter-service Calls
+
+- For sending emails, an internal service call to the `EmailNotificationService` SHALL be made using a RESTful POST method with the token.
+
+#### Testing Approach
+
+- Unit tests SHALL be written for `DeletionRequestHandler` and `TokenVerificationHandler`.
+- Integration tests SHALL cover the complete deletion workflow from token generation to account removal.
+- Security tests SHALL ensure that tokens cannot be forged or reused.
+
+### Architectural Decision Records (ADRs)
+
+- **ADR-001**: Use of `VerificationToken` pattern for deletion verification
+  - **Context**: Securely validate user consent for account deletion
+  - **Decision**: Implement `VerificationToken` with expiration
+  - **Rationale**: Provides security, tracks consent, limits token misuse
+  - **Alternative**: Use OTP, rejected for complexity and user inconvenience
+
+### Simplicity Gate Assessment
+
+- **Rating**: appropriate
+  - Each technical element maps clearly to one or more functional requirements without excess complexity.
+
+### Affected Services and API Changes
+
+- **User Management Service**
+  - New API endpoints for initiating and verifying deletion requests.
+  - Affects data model with `VerificationToken` schema updates.
+
+### Context
+
+- The accounts MUST remain secure and only be deleted post-verification to ensure compliance with expected user consent protocols.
+
+## Affected Services
+
+_None identified._
+
+## API Changes
+
+_No API changes identified._
+
+## Open Questions / Gaps
+
+_No gaps identified._

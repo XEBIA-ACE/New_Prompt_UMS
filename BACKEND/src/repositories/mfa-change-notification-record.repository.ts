@@ -37,6 +37,14 @@ interface MfaChangeNotificationRecordRow {
   retry_count: number;
 }
 
+const MFA_STATES: readonly MfaState[] = ['enabled', 'disabled'];
+
+function assertMfaState(value: string, field: string): void {
+  if (!MFA_STATES.includes(value as MfaState)) {
+    throw new Error(`Invalid ${field}: ${value}`);
+  }
+}
+
 function rowToEntity(row: MfaChangeNotificationRecordRow): MfaChangeNotificationRecord {
   return {
     recordId: row.record_id,
@@ -61,6 +69,8 @@ export class MfaChangeNotificationRecordRepository
    * persisted entity.
    */
   async insert(record: NewMfaChangeNotificationRecord): Promise<MfaChangeNotificationRecord> {
+    assertMfaState(record.mfaOldState, 'mfaOldState');
+    assertMfaState(record.mfaNewState, 'mfaNewState');
     const recordId = uuidv4();
     this.db
       .prepare(

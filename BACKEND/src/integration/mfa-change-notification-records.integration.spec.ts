@@ -156,7 +156,8 @@ describe('mfa_change_notification_records schema', () => {
         mfaNewState: 'bogus' as never,
         changeTimestamp: new Date(),
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow('Invalid mfaNewState');
+    expect(await repo.findByUserId('user-2')).toEqual([]);
   });
 
   it('[00e31335-9656-5ec1-9dd0-2c560db152a0-AC3] migrating a populated pre-MFA database is non-destructive', () => {

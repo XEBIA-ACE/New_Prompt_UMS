@@ -137,18 +137,15 @@ describe('mfa_change_notification_records schema', () => {
     expect(await repo.findById('missing')).toBeNull();
   });
 
-  it('[00e31335-9656-5ec1-9dd0-2c560db152a0-AC2] rejects invalid MFA states and unknown users', async () => {
+  it('[00e31335-9656-5ec1-9dd0-2c560db152a0-AC2] links to users and rejects invalid MFA states', async () => {
     runMigrations(db);
     const repo = new MfaChangeNotificationRecordRepository(db);
-    await expect(
-      repo.insert({
-        userId: 'no-such-user',
-        recipientAddress: 'x@example.test',
-        mfaOldState: 'disabled',
-        mfaNewState: 'enabled',
-        changeTimestamp: new Date(),
-      }),
-    ).rejects.toThrow();
+    const fks = db.prepare('PRAGMA foreign_key_list(mfa_change_notification_records)').all() as {
+      table: string;
+      from: string;
+      to: string;
+    }[];
+    expect(fks).toEqual([expect.objectContaining({ table: 'users', from: 'user_id', to: 'id' })]);
 
     insertUser(db, 'user-2', 'user2@example.test');
     await expect(

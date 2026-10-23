@@ -12,12 +12,13 @@ import { EmailOtpDeliveryAdapter } from './adapters/email-otp-delivery.adapter';
 import { OutboxWorker } from './workers/outbox.worker';
 import { AccountDeletionNotificationWorker } from './workers/account-deletion-notification.worker';
 import { otpConfig } from './config/otp.config';
+import { emailTemplateConfig } from './config/email-template.config';
 
 const db = createDb();
 runMigrations(db);
 
 const otpRedisClient = new Redis(otpConfig.redisUrl);
-const emailDeliveryPort = new SendGridEmailAdapter();
+const emailDeliveryPort = new SendGridEmailAdapter(emailTemplateConfig);
 const otpDeliveryPort = new EmailOtpDeliveryAdapter(emailDeliveryPort);
 const app = createApp(db, otpRedisClient, otpDeliveryPort, emailDeliveryPort);
 

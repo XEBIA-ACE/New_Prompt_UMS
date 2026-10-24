@@ -86,6 +86,10 @@ For a production-style build: `npm run build` (outputs to `FRONTEND/dist/`).
 
 There is no separate "wait for Redis ready" step — if Redis is unreachable at boot, the app still starts and binds the port; `GET /health` reports `db_reachable` for the SQLite file (always reachable once the file is created) and most OTP-rate-limit routes will fail on first use if Redis is down. Ensure Redis is up **before** `npm start`.
 
+## Architecture decisions
+
+Durable design decisions are recorded as ADRs in [`DOCS/adr/`](DOCS/adr/README.md). OTP verification decisions (error naming, attempt counter ownership, verified status representation, verify-on-already-active behavior) are in [ADR 0001](DOCS/adr/0001-otp-verification-open-decisions.md).
+
 ## Verifying it's running
 
 ```powershell

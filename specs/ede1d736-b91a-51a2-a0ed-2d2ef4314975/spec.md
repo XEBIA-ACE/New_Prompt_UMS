@@ -1,0 +1,42 @@
+# Feature Specification: ede1d736-b91a-51a2-a0ed-2d2ef4314975
+
+## User Scenarios & Testing
+- **ede1d736-b91a-51a2-a0ed-2d2ef4314975**: Given the team has reviewed the four open decisions (error naming, attempt counter ownership, verified status representation, verify-on-already-active behavior), when a consensus is reached on each decision, then the agreed approach is documented in a decision artifact (ADR, design doc, or Jira comment) with clear rationale for each choice.
+- **ede1d736-b91a-51a2-a0ed-2d2ef4314975**: Given the error naming decision, when the team chooses between breaking change (adopt spec error names) or backward compatibility (keep current names), then the choice is documented with impact analysis on existing clients and any deprecation plan if applicable.
+- **ede1d736-b91a-51a2-a0ed-2d2ef4314975**: Given the attempt counter ownership decision, when the team chooses between otp_requests table or users table, then the choice is documented with schema implications and rationale for the selected ownership model.
+- **ede1d736-b91a-51a2-a0ed-2d2ef4314975**: Given the verified status representation decision, when the team chooses between a new status field or using invalidated_at timestamp, then the choice is documented with schema implications and query performance considerations.
+- **ede1d736-b91a-51a2-a0ed-2d2ef4314975**: Given the verify-on-already-active behavior decision, when the team chooses between no-op success or error response, then the choice is documented with user experience and security rationale.
+
+## Functional Requirements
+- FR-001 (S1-AC1): The team SHALL produce at least one decision artifact (e.g., ADR, design document, or Jira comment) that documents the final agreed approach for each of the four decisions: error naming, attempt counter ownership, verified status representation, and verify-on-already-active behavior, after consensus has been reached on each decision.
+- FR-002 (S1-AC1): Each decision entry in the decision artifact SHALL include an explicit statement of the chosen option (e.g., which error naming strategy, which ownership model) and a written rationale explaining why that option was selected.
+- FR-003 (S1-AC2): For the error naming decision, the decision artifact SHALL explicitly state whether the system will adopt spec-aligned error names (a breaking change) or retain the current error names (backward compatibility), without implicitly assuming one option.
+- FR-004 (S1-AC2): For whichever error naming option is selected, the decision artifact SHALL include an impact analysis on existing API clients, describing potential breakage or compatibility implications.
+- FR-005 (S1-AC2): If the chosen error naming strategy introduces a breaking change, the decision artifact SHALL document any planned deprecation or migration strategy for clients; if no deprecation plan is needed, the artifact SHALL explicitly state that none is planned and why.
+- FR-006 (S1-AC3): For the attempt counter ownership decision, the decision artifact SHALL explicitly state whether failed OTP verification attempts will be tracked in the otp_requests table or in the users table, without resolving to both or leaving it implicit.
+- FR-007 (S1-AC3): The decision artifact SHALL describe the schema implications of the chosen attempt counter ownership model, including which table(s) are affected and any new or repurposed columns or constraints required.
+- FR-008 (S1-AC3): The decision artifact SHALL record the rationale for selecting the chosen attempt counter ownership model, including considerations such as data locality, performance, maintainability, and reporting, as applicable.
+- FR-009 (S1-AC4): For the verified status representation decision, the decision artifact SHALL explicitly state whether the OTP verified state will be represented using a new status field or by using the existing invalidated_at timestamp, without assuming or mixing both models.
+- FR-010 (S1-AC4): The decision artifact SHALL document schema implications of the chosen verified status representation (e.g., new fields, constraints, or how invalidated_at will be used) and SHALL note any anticipated query performance considerations (e.g., index needs, query patterns) relevant to that choice.
+- FR-011 (S1-AC5): For the verify-on-already-active behavior decision, the decision artifact SHALL explicitly state whether calling verify on an already-active OTP is treated as a no-op success or as an error response, including how this maps to API behavior (e.g., success vs. error semantics) without resolving unmentioned edge cases.
+- FR-012 (S1-AC5): The decision artifact SHALL document the user experience rationale (e.g., clarity to end users, consistency) and security rationale (e.g., risks of abuse, information leakage) that justify the chosen verify-on-already-active behavior.
+- FR-013 (S1-AC1 to S1-AC5): The decision artifact SHALL be stored in a location accessible to the implementation team (e.g., linked from the relevant Jira story, ADR directory, or shared design docs) so that downstream work on S3, S7, S8, and S11 can proceed without requiring re-clarification of these four decisions.
+
+## Success Criteria
+- **S1-AC1**: Given the team has reviewed the four open decisions (error naming, attempt counter ownership, verified status representation, verify-on-already-active behavior), when a consensus is reached on each decision, then the agreed approach is documented in a decision artifact (ADR, design doc, or Jira comment) with clear rationale for each choice.
+- **S1-AC2**: Given the error naming decision, when the team chooses between breaking change (adopt spec error names) or backward compatibility (keep current names), then the choice is documented with impact analysis on existing clients and any deprecation plan if applicable.
+- **S1-AC3**: Given the attempt counter ownership decision, when the team chooses between otp_requests table or users table, then the choice is documented with schema implications and rationale for the selected ownership model.
+- **S1-AC4**: Given the verified status representation decision, when the team chooses between a new status field or using invalidated_at timestamp, then the choice is documented with schema implications and query performance considerations.
+- **S1-AC5**: Given the verify-on-already-active behavior decision, when the team chooses between no-op success or error response, then the choice is documented with user experience and security rationale.
+- **IMPACT**: Verify acceptance criterion: Given the team has reviewed the four open decisions (error naming, attempt counter ownership, verified status representation, verify-on-already-active behavior), when a consensus is reached on each decision, then the agreed approach is documented in a decision artifact (ADR, design doc, or Jira comment) with clear rationale for each choice.
+- **IMPACT**: Verify acceptance criterion: Given the error naming decision, when the team chooses between breaking change (adopt spec error names) or backward compatibility (keep current names), then the choice is documented with impact analysis on existing clients and any deprecation plan if applicable.
+- **IMPACT**: Verify acceptance criterion: Given the attempt counter ownership decision, when the team chooses between otp_requests table or users table, then the choice is documented with schema implications and rationale for the selected ownership model.
+- **IMPACT**: Verify acceptance criterion: Given the verified status representation decision, when the team chooses between a new status field or using invalidated_at timestamp, then the choice is documented with schema implications and query performance considerations.
+- **IMPACT**: Verify acceptance criterion: Given the verify-on-already-active behavior decision, when the team chooses between no-op success or error response, then the choice is documented with user experience and security rationale.
+
+## Provenance
+- **Policy version**: `ace-spec-format/v1`
+- **Accepted impact analysis revision**: `1`
+- **Accepted impact analysis**: `sha256:7acc1b7741b2a8ed83692860834a20cbb5aac3325e7cb7af3915dedbda02e1ac`
+- **Repository baseline commit**: `6c342dc4248be55aeaa6222f8360fba085e07577`
+- **Deterministic grounding reference**: `ae246fe2f5b81296`

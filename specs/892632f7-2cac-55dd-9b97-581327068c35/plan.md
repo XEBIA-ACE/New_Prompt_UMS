@@ -1,0 +1,34 @@
+# Implementation Plan: 892632f7-2cac-55dd-9b97-581327068c35
+
+## Technical Context
+- Codebase grounding snapshot (ae246fe2f5b81296)
+- Accepted impact analysis (sha256:0572c6c5c22b16da410a2a31552d027c7110799deef6a5a8714a89583a82e48b)
+- Implement only against Accepted impact analysis (revision 1) (fingerprint sha256:0572c6c5c22b16da410a2a31552d027c7110799deef6a5a8714a89583a82e48b)
+- Resolve or explicitly accept the following implementation-readiness items:
+  - Candidate verification found the selected focus object implausible for this requirement: The requirement is to create a new DEFAULT.mfa_setting_change_email_records table, whereas the selected object is an existing DEFAULT.registration_email_records table used for registration emails, not MFA setting-change emails.
+  - No CAST object yet for DEFAULT.mfa_setting_change_email_records or its migration script.
+  - No pre-existing implementation was found for this requirement; scope is derived solely from the requirement text, not from measured code evidence.
+  - No transaction, API, or caller graphs involving registration_email_records (422) were available, limiting blast-radius tracing to its downstream tables only.
+  - No-match classification: Initial classification (net-new capability) has a noted caveat: The requirement is about adding a new table but is explicitly modeled on existing email outbox tables; it is plausible that similarly named tables like registration_email_records or account_deletion_notification_records already exist and the new one should align with them, yet the search only looked for the new name, not the existing patterns.
+  - No-match consistency check raised a caveat about this classification: The requirement is about adding a new table but is explicitly modeled on existing email outbox tables; it is plausible that similarly named tables like registration_email_records or account_deletion_notification_records already exist and the new one should align with them, yet the search only looked for the new name, not the existing patterns.
+  - Requirement detail is incomplete (see evidence_gaps); no conflicting existing implementation was found
+  - Searched 1 term(s) derived from this requirement (registration_email_records) against Cast; none resolved to an existing code object.
+  - Which components will need to be built to implement each acceptance criterion, since no existing implementation was found?
+
+## Contract Changes
+- No material API, event, or data contract change is evidenced.
+
+## Security and Quality
+- Validate credential and personal-data handling against the Jira requirement
+- Validate credential and personal-data handling against the story's acceptance criteria
+- Preserve the availability, reliability, and observability constraints grounded by ae246fe2f5b81296
+
+## Verification Plan
+- **S3-AC1**: Given an environment where the DEFAULT schema is initialized from scratch using the project’s standard setup or migration process, When the migration or schema script that introduces DEFAULT.mfa_setting_change_email_records is executed, Then the database contains a table named DEFAULT.mfa_setting_change_email_records with columns and types consistent with the patterns used by DEFAULT.registration_email_records and DEFAULT.account_deletion_notification_records, including identifiers, user reference, status, timestamps, and fields to store MFA change type and change timestamp.
+- **S3-AC2**: Given an environment that already has the DEFAULT.mfa_setting_change_email_records table present, When the migration or schema script suite is re-run according to existing project practices, Then the script completes without fatal errors or destructive changes (for example it does not drop or re-create the table in a way that would lose existing records) and leaves the table structure compatible with the intended outbox usage.
+- **S3-AC3**: Given a running instance of the application configured with better-sqlite3 pointing at a database where the migration has been applied, When a simple insert and select are performed against DEFAULT.mfa_setting_change_email_records using the same database connection used for other DEFAULT.* tables, Then the operations succeed, demonstrating that the table is available to application code for future MFA notification record persistence.
+- **S3-AC4**: Given the existing registration_email_records and account_deletion_notification_records tables are already in use by the application, When the new migration for DEFAULT.mfa_setting_change_email_records is applied to an environment containing production-like data, Then the existing tables, their data, and any logic that currently uses them continue to function without change, showing that introducing the new table did not regress registration or account deletion email flows.
+- **IMPACT**: Verify acceptance criterion: Given an environment where the DEFAULT schema is initialized from scratch using the project’s standard setup or migration process, When the migration or schema script that introduces DEFAULT.mfa_setting_change_email_records is executed, Then the database contains a table named DEFAULT.mfa_setting_change_email_records with columns and types consistent with the patterns used by DEFAULT.registration_email_records and DEFAULT.account_deletion_notification_records, including identifiers, user reference, status, timestamps, and fields to store MFA change type and change timestamp.
+- **IMPACT**: Verify acceptance criterion: Given an environment that already has the DEFAULT.mfa_setting_change_email_records table present, When the migration or schema script suite is re-run according to existing project practices, Then the script completes without fatal errors or destructive changes (for example it does not drop or re-create the table in a way that would lose existing records) and leaves the table structure compatible with the intended outbox usage.
+- **IMPACT**: Verify acceptance criterion: Given a running instance of the application configured with better-sqlite3 pointing at a database where the migration has been applied, When a simple insert and select are performed against DEFAULT.mfa_setting_change_email_records using the same database connection used for other DEFAULT.* tables, Then the operations succeed, demonstrating that the table is available to application code for future MFA notification record persistence.
+- **IMPACT**: Verify acceptance criterion: Given the existing registration_email_records and account_deletion_notification_records tables are already in use by the application, When the new migration for DEFAULT.mfa_setting_change_email_records is applied to an environment containing production-like data, Then the existing tables, their data, and any logic that currently uses them continue to function without change, showing that introducing the new table did not regress registration or account deletion email flows.

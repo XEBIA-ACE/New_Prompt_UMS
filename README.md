@@ -48,6 +48,20 @@ cd BACKEND
 npm run build
 npm start
 ```
+
+### OTP attempt configuration
+
+The backend reads `OTP_MAX_ATTEMPTS` at startup. It defaults to `5`; set the
+environment variable in `BACKEND/.env` or the process environment to override
+it. The OTP config module exports the numeric `OTP_MAX_ATTEMPTS` constant, and
+the OTP service layer re-exports it for consumers that need the threshold.
+The backend currently uses its existing integer configuration parser; the
+approved spec leaves invalid or non-integer override handling open (FR-S2-AC3).
+
+To roll back this configuration, remove the `OTP_MAX_ATTEMPTS` setting and
+revert the OTP config/service export changes. The default returns to `5` while
+the existing `OTP_MAX_ATTEMPTS_PER_WINDOW` rate-limit setting remains separate.
+
 Or for development iteration: `node dist/server.js` after `npm run build`, or run via the VS Code debugger (`.vscode/launch.json` — see `DOCS/FRONTEND_INTEGRATION_GUIDE.md`/Phase 14 configs).
 
 Expected startup log:

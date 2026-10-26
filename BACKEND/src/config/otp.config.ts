@@ -67,6 +67,10 @@ function requireEnvString(envKey: string): string {
 
 const otpLength = parsePositiveInt('OTP_LENGTH', 6);
 const otpTtlMinutes = parsePositiveInt('OTP_TTL_MINUTES', 10);
+// TODO(FR-S2-AC3): The approved spec leaves non-integer/invalid override
+// semantics open. Reuse this module's existing integer parser for now; decide
+// whether invalid values should fail startup or be handled differently later.
+export const OTP_MAX_ATTEMPTS = parsePositiveInt('OTP_MAX_ATTEMPTS', 5);
 const otpMaxAttemptsPerWindow = parsePositiveInt('OTP_MAX_ATTEMPTS_PER_WINDOW', 5);
 const otpRateLimitWindowMinutes = parsePositiveInt('OTP_RATE_LIMIT_WINDOW_MINUTES', 15);
 const otpHashAlgorithm = process.env.OTP_HASH_ALGORITHM?.trim() || 'sha256';

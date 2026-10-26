@@ -36,6 +36,10 @@ import {
 } from '../errors/otp.errors';
 import { otpConfig } from '../config/otp.config';
 
+// Keep the configuration available through the OTP service layer for callers
+// that need to compare an attempt count with this threshold (FR-S2-AC4).
+export { OTP_MAX_ATTEMPTS } from '../config/otp.config';
+
 // ---------------------------------------------------------------------------
 // Interface
 // ---------------------------------------------------------------------------

@@ -16,6 +16,12 @@ import { OtpRequestEntity } from '../types/otp.types';
 // ---------------------------------------------------------------------------
 
 export interface IOtpRequestRepository {
+  // FR-S3-AC5 / S3-AC5: all four methods return null for a missing row.
+  // Synchronous SQLite access keeps writes inside the service transaction.
+  getAttemptCount(otpRequestId: string): number | null;
+  incrementAttemptCount(otpRequestId: string): number | null;
+  getVerified(otpRequestId: string): boolean | null;
+  setVerified(otpRequestId: string, timestamp: string): boolean | null;
   create(record: Omit<OtpRequestEntity, 'id'>): Promise<OtpRequestEntity>;
   findActiveByUserId(userId: string): Promise<OtpRequestEntity | null>;
   invalidateActiveByUserId(userId: string): Promise<void>;
@@ -65,6 +71,41 @@ function rowToEntity(row: OtpRequestRow): OtpRequestEntity {
 
 export class OtpRequestRepository implements IOtpRequestRepository {
   constructor(private readonly db: Database) {}
+
+  /** FR-S3-AC1 / S3-AC1; FR-S3-AC6: bind the request id. */
+  getAttemptCount(otpRequestId: string): number | null {
+    const row = this.db.prepare('SELECT attempt_count FROM otp_requests WHERE id = ?')
+      .get(otpRequestId) as { attempt_count: number } | undefined;
+    return row === undefined ? null : row.attempt_count;
+  }
+
+  /** FR-S3-AC2 / S3-AC2: atomic increment and return, without a read/write race. */
+  incrementAttemptCount(otpRequestId: string): number | null {
+    const row = this.db.prepare(
+      'UPDATE otp_requests SET attempt_count = attempt_count + 1 WHERE id = ? RETURNING attempt_count',
+    ).get(otpRequestId) as { attempt_count: number } | undefined;
+    return row === undefined ? null : row.attempt_count;
+  }
+
+  /** FR-S3-AC3 / S3-AC3: SQLite stores booleans as integers. */
+  getVerified(otpRequestId: string): boolean | null {
+    const row = this.db.prepare('SELECT verified FROM otp_requests WHERE id = ?')
+      .get(otpRequestId) as { verified: number } | undefined;
+    return row === undefined ? null : row.verified === 1;
+  }
+
+  /**
+   * FR-S3-AC4 / S3-AC4, FR-S3-AC6 / S3-AC6: timestamp is a caller-provided
+   * ISO 8601 value, bound verbatim. Returns true on update, null if missing.
+   * Repeated writes retain the first verification timestamp (minimal assumption).
+   */
+  setVerified(otpRequestId: string, timestamp: string): boolean | null {
+    const row = this.db.prepare(
+      `UPDATE otp_requests SET verified_at = CASE WHEN verified = 0 THEN ? ELSE verified_at END,
+       verified = 1 WHERE id = ? RETURNING verified`,
+    ).get(timestamp, otpRequestId) as { verified: number } | undefined;
+    return row === undefined ? null : row.verified === 1;
+  }
 
   /**
    * Insert a new OTP request row and return the persisted entity (with

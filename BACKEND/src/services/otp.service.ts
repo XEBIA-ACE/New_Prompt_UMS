@@ -115,6 +115,14 @@ export class DefaultOtpService implements OtpService {
       throw new OtpNotFoundError(userId);
     }
 
+    // FR-S3-AC5 / S3-AC5: missing repository rows map to the existing
+    // OtpNotFoundError -> HTTP 404 OTP_NOT_FOUND in OtpController.
+    const verified = this.otpRequestRepository.getVerified(request.id);
+    const attempts = this.otpRequestRepository.getAttemptCount(request.id);
+    if (verified === null || attempts === null || verified) {
+      throw new OtpNotFoundError(userId);
+    }
+    // IMPACT: no verification lockout threshold exists; do not invent one.
     if (new Date() > request.expiresAt) {
       throw new OtpExpiredError(userId);
     }
@@ -126,11 +134,17 @@ export class DefaultOtpService implements OtpService {
       crypto.timingSafeEqual(submittedHash, storedHash);
 
     if (!matches) {
+      if (this.otpRequestRepository.incrementAttemptCount(request.id) === null) {
+        throw new OtpNotFoundError(userId);
+      }
       throw new OtpInvalidError(userId);
     }
 
     const activatedAt = new Date();
     await withTransaction(this.db, () => {
+      if (this.otpRequestRepository.setVerified(request.id, activatedAt.toISOString()) === null) {
+        throw new OtpNotFoundError(userId);
+      }
       this.db
         .prepare(`UPDATE users SET status = 'active', activated_at = ? WHERE id = ?`)
         .run(activatedAt.toISOString(), userId);

@@ -33,6 +33,7 @@ import {
   OtpNotFoundError,
   OtpExpiredError,
   OtpInvalidError,
+  AccountStateInvalidError,
 } from '../errors/otp.errors';
 import { otpConfig } from '../config/otp.config';
 
@@ -106,8 +107,11 @@ export class DefaultOtpService implements OtpService {
    */
   async verifyOtp(userId: string, passcode: string): Promise<OtpVerifyResult> {
     const user = await this.userRepository.findById(userId);
-    if (user === null || (user.status !== 'pending' && user.status !== 'active')) {
+    if (user === null) {
       throw new OtpNotFoundError(userId);
+    }
+    if (user.status !== 'pending' && user.status !== 'active') {
+      throw new AccountStateInvalidError();
     }
 
     const request = await this.otpRequestRepository.findActiveByUserId(userId);

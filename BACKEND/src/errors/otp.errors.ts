@@ -57,6 +57,43 @@ export class OtpDispatchFailedError extends Error {
 // Verification flow
 // ---------------------------------------------------------------------------
 
+/** OTP verification errors serialized by the application's global handler. */
+export abstract class OtpVerificationError extends Error {
+  abstract readonly error_code: 'INVALID_PASSCODE' | 'OTP_LOCKED' | 'ACCOUNT_STATE_INVALID';
+
+  protected constructor(message: string) {
+    super(message);
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+export class InvalidPasscodeError extends OtpVerificationError {
+  readonly error_code = 'INVALID_PASSCODE' as const;
+
+  constructor(userId: string) {
+    super(`The submitted OTP is incorrect for user '${userId}'.`);
+    this.name = 'InvalidPasscodeError';
+  }
+}
+
+export class OtpLockedError extends OtpVerificationError {
+  readonly error_code = 'OTP_LOCKED' as const;
+
+  constructor(message = 'OTP verification is locked.') {
+    super(message);
+    this.name = 'OtpLockedError';
+  }
+}
+
+export class AccountStateInvalidError extends OtpVerificationError {
+  readonly error_code = 'ACCOUNT_STATE_INVALID' as const;
+
+  constructor(message = 'The account state does not allow OTP verification.') {
+    super(message);
+    this.name = 'AccountStateInvalidError';
+  }
+}
+
 export class OtpNotFoundError extends Error {
   public readonly userId: string;
 
@@ -79,11 +116,11 @@ export class OtpExpiredError extends Error {
   }
 }
 
-export class OtpInvalidError extends Error {
+export class OtpInvalidError extends InvalidPasscodeError {
   public readonly userId: string;
 
   constructor(userId: string) {
-    super(`The submitted OTP is incorrect for user '${userId}'.`);
+    super(userId);
     this.name = 'OtpInvalidError';
     this.userId = userId;
     Object.setPrototypeOf(this, OtpInvalidError.prototype);

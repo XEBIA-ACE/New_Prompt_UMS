@@ -11,6 +11,7 @@ import type { Database } from 'better-sqlite3';
 import { v4 as uuidv4 } from 'uuid';
 import { Redis } from 'ioredis';
 import { createOtpRouter } from '../routes/otp.routes';
+import { createAppErrorHandler } from '../app';
 import { OtpDeliveryPort } from '../adapters/otp-delivery.port';
 import { createTestDb, closeTestDb, TestDb } from './test-db';
 
@@ -60,6 +61,7 @@ beforeAll(async () => {
   app = express();
   app.use(express.json());
   app.use('/api/v1/otp', createOtpRouter(db, redis, deliveryPort));
+  app.use(createAppErrorHandler);
 });
 
 afterEach(() => {
@@ -220,7 +222,7 @@ describe('Integration | OTP verify', () => {
       .send({ userId: user.id, passcode: '000000' })
       .expect(422);
 
-    expect(response.body.errorCode).toBe('OTP_INVALID');
+    expect(response.body).toEqual({ outcome: 'error', error_code: 'INVALID_PASSCODE' });
 
     await redis.del(`otp:rl:${user.id}`);
   });

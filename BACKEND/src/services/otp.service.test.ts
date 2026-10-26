@@ -13,6 +13,7 @@ import {
   OtpNotFoundError,
   OtpExpiredError,
   OtpInvalidError,
+  AccountStateInvalidError,
 } from '../errors/otp.errors';
 import { UserEntity } from '../types/registration.types';
 import { OtpRequestEntity } from '../types/otp.types';
@@ -241,6 +242,14 @@ describe('DefaultOtpService', () => {
 
       await expect(service.verifyOtp('user-1', '654321')).rejects.toBeInstanceOf(OtpNotFoundError);
       expect(otpRequestRepository.findActiveByUserId).not.toHaveBeenCalled();
+    });
+
+    test('throws AccountStateInvalidError for a user in an unsupported account state', async () => {
+      userRepository.findById.mockResolvedValue(buildUser({ status: 'suspended' }));
+
+      await expect(service.verifyOtp('user-1', '654321')).rejects.toBeInstanceOf(AccountStateInvalidError);
+      expect(otpRequestRepository.findActiveByUserId).not.toHaveBeenCalled();
+      expect(mockDb.transaction).not.toHaveBeenCalled();
     });
 
     test('throws OtpExpiredError when the OTP has expired', async () => {

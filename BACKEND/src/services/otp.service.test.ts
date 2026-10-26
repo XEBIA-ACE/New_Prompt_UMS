@@ -95,6 +95,10 @@ describe('DefaultOtpService', () => {
       markFailed: jest.fn(),
       findById: jest.fn(),
       getNextAttemptSequence: jest.fn().mockResolvedValue(1),
+      getAttemptCount: jest.fn().mockReturnValue(0),
+      incrementAttemptCount: jest.fn().mockReturnValue(1),
+      getVerified: jest.fn().mockReturnValue(false),
+      setVerified: jest.fn().mockReturnValue(true),
     };
     rateLimitGuard = { allow: jest.fn().mockResolvedValue(true) };
     otpDeliveryPort = { dispatch: jest.fn().mockResolvedValue(true) };

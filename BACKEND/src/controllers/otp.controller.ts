@@ -39,6 +39,9 @@ import {
 } from '../errors/otp.errors';
 
 export class OtpController {
+  // IMPACT: constructor injection remains controller -> service -> repository.
+  // The service owns persistence and FR-S3-AC5 null mapping; this controller
+  // keeps the existing HTTP error contracts and contains no data access.
   constructor(private readonly otpService: OtpService) {}
 
   /**

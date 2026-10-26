@@ -43,7 +43,9 @@ export function createOtpRouter(db: Database, redis: Redis, otpDeliveryPort: Otp
   router.post('/resend', (req, res) => { void controller.resendOtp(req, res); });
 
   // POST /api/v1/otp/verify
-  router.post('/verify', (req, res) => { void controller.verifyOtp(req, res); });
+  router.post('/verify', (req, res, next) => {
+    void controller.verifyOtp(req, res).catch(next);
+  });
 
   return router;
 }

@@ -19,7 +19,7 @@
  *   success                     -> 200 { message, userId, activatedAt }
  *   OtpNotFoundError            -> 404 OTP_NOT_FOUND
  *   OtpExpiredError             -> 410 OTP_EXPIRED
- *   OtpInvalidError             -> 422 OTP_INVALID
+ *   InvalidPasscodeError        -> 422 INVALID_PASSCODE via application middleware
  *   malformed body              -> 400
  *   unexpected                  -> 500
  *
@@ -35,7 +35,6 @@ import {
   OtpRateLimitExceededError,
   OtpNotFoundError,
   OtpExpiredError,
-  OtpInvalidError,
 } from '../errors/otp.errors';
 
 export class OtpController {
@@ -90,13 +89,9 @@ export class OtpController {
         return;
       }
 
-      if (err instanceof OtpInvalidError) {
-        res.status(422).json({ errorCode: 'OTP_INVALID', message: err.message });
-        return;
-      }
-
-      console.error('[OtpController] Unexpected error during verification:', err);
-      res.status(500).json({ error: 'An unexpected error occurred while verifying the OTP.' });
+      // Verification-specific errors are serialized by the application-level
+      // error handler. The route forwards this rejection with next(err).
+      throw err;
     }
   }
 

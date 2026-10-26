@@ -43,8 +43,12 @@ import {
   DeletionRequestAlreadyPendingException,
   DeletionRequestNotFoundException,
 } from './errors/account-deletion.errors';
+import {
+  OtpLockedError,
+  OtpVerificationError,
+} from './errors/otp.errors';
 
-function createAppErrorHandler(
+export function createAppErrorHandler(
   err: unknown,
   _req: Request,
   res: Response,
@@ -52,6 +56,12 @@ function createAppErrorHandler(
 ): void {
   if (res.headersSent) {
     return next(err);
+  }
+
+  if (err instanceof OtpVerificationError) {
+    const status = err instanceof OtpLockedError ? 409 : 422;
+    res.status(status).json({ outcome: 'error', error_code: err.error_code });
+    return;
   }
 
   if (err instanceof ValidationError) {

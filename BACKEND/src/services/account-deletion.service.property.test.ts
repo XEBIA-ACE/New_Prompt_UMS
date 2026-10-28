@@ -55,6 +55,7 @@ class FakeUserRepository implements IUserRepository {
   async updateLastLoginAt(): Promise<void> {}
   async updatePasswordHash(): Promise<void> {}
   async anonymizeAndMarkDeleted(): Promise<void> {}
+  async updateMfaEnabled(): Promise<void> {}
 }
 
 class FakeDeletionRequestRepository implements IDeletionRequestRepository {
@@ -200,6 +201,7 @@ function buildUser(overrides: Partial<UserEntity> = {}): UserEntity {
     lockedUntil: null,
     lastLoginAt: null,
     deletedAt: null,
+    mfaEnabled: false,
     ...overrides,
   };
 }

@@ -5,19 +5,23 @@
  * placeholders — no string interpolation.
  *
  * Requirements: US-064 FR-003–004, FR-008; US-074 FR-008, FR-010, FR-015;
- *               US-036 FR-002, FR-006–009, FR-018 (F-03 additions)
+ *               US-036 FR-002, FR-006–009, FR-018 (F-03 additions);
+ *               story effa3c4f FR-S1-001–004 (MFA setting flag)
  */
 
 import type { Database } from 'better-sqlite3';
 import { v4 as uuidv4 } from 'uuid';
-import { UserEntity } from '../types/registration.types';
+import { DEFAULT_MFA_ENABLED, UserEntity } from '../types/registration.types';
 
 // ---------------------------------------------------------------------------
 // Interface
 // ---------------------------------------------------------------------------
 
+/** New-user input: `mfaEnabled` falls back to DEFAULT_MFA_ENABLED when omitted. */
+export type NewUserEntity = Omit<UserEntity, 'id' | 'mfaEnabled'> & { mfaEnabled?: boolean };
+
 export interface IUserRepository {
-  insert(entity: Omit<UserEntity, 'id'>): Promise<UserEntity>;
+  insert(entity: NewUserEntity): Promise<UserEntity>;
   findByNormalisedUsername(normalised: string): Promise<UserEntity | null>;
   findById(id: string): Promise<UserEntity | null>;
   updateStatus(
@@ -39,6 +43,8 @@ export interface IUserRepository {
     anonymizedUsername: string,
     deletedAt: Date,
   ): Promise<void>;
+  // --- MFA setting flag (FR-S1-003, FR-S1-004) ---
+  updateMfaEnabled(id: string, enabled: boolean): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -58,6 +64,7 @@ interface UserRow {
   locked_until: string | null;
   last_login_at: string | null;
   deleted_at: string | null;
+  mfa_enabled: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -78,6 +85,7 @@ function rowToEntity(row: UserRow): UserEntity {
     lockedUntil: row.locked_until === null ? null : new Date(row.locked_until),
     lastLoginAt: row.last_login_at === null ? null : new Date(row.last_login_at),
     deletedAt: row.deleted_at === null ? null : new Date(row.deleted_at),
+    mfaEnabled: row.mfa_enabled === 1,
   };
 }
 
@@ -91,13 +99,14 @@ export class UserRepository implements IUserRepository {
   /**
    * Insert a new user row and return the persisted entity (with generated id).
    */
-  async insert(entity: Omit<UserEntity, 'id'>): Promise<UserEntity> {
+  async insert(entity: NewUserEntity): Promise<UserEntity> {
     const id = uuidv4();
+    const mfaEnabled = entity.mfaEnabled ?? DEFAULT_MFA_ENABLED;
     const sql = `
       INSERT INTO users
         (id, username, username_normalised, email, password_hash, status,
-         registration_timestamp, activated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         registration_timestamp, activated_at, mfa_enabled)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     this.db
@@ -111,6 +120,7 @@ export class UserRepository implements IUserRepository {
         entity.status,
         entity.registrationTimestamp.toISOString(),
         entity.activatedAt === null ? null : entity.activatedAt.toISOString(),
+        mfaEnabled ? 1 : 0,
       );
 
     const row = this.db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow;
@@ -250,5 +260,17 @@ export class UserRepository implements IUserRepository {
          WHERE id = ?`,
       )
       .run(anonymizedEmail, anonymizedUsername, anonymizedUsername, deletedAt.toISOString(), id);
+  }
+
+  // ---------------------------------------------------------------------
+  // MFA setting flag (story effa3c4f FR-S1-003, FR-S1-004)
+  // ---------------------------------------------------------------------
+
+  /**
+   * Persist the user's MFA setting. Touches only `mfa_enabled`; all other
+   * columns are left unchanged.
+   */
+  async updateMfaEnabled(id: string, enabled: boolean): Promise<void> {
+    this.db.prepare('UPDATE users SET mfa_enabled = ? WHERE id = ?').run(enabled ? 1 : 0, id);
   }
 }

@@ -25,6 +25,7 @@ function buildUser(overrides: Partial<UserEntity> = {}): UserEntity {
     lockedUntil: null,
     lastLoginAt: null,
     deletedAt: null,
+    mfaEnabled: false,
     ...overrides,
   };
 }
@@ -49,6 +50,7 @@ describe('DefaultAuthService', () => {
       updateLastLoginAt: jest.fn(),
       updatePasswordHash: jest.fn(),
       anonymizeAndMarkDeleted: jest.fn(),
+      updateMfaEnabled: jest.fn(),
     };
     passwordHasher = {
       hash: jest.fn(),

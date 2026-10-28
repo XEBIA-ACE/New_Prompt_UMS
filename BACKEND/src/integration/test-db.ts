@@ -23,6 +23,7 @@ const MIGRATION_FILES = [
   '006_create_password_recovery_requests.sql',
   '007_create_account_deletion_requests.sql',
   '008_create_account_deletion_notification_records.sql',
+  '009_add_users_mfa_enabled.sql',
 ];
 
 const TABLES_IN_FK_SAFE_ORDER = [

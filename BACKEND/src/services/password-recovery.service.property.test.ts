@@ -61,6 +61,7 @@ class FakeUserRepository implements IUserRepository {
     }
   }
   async anonymizeAndMarkDeleted(): Promise<void> {}
+  async updateMfaEnabled(): Promise<void> {}
 }
 
 class FakeRecoveryRequestRepository implements IPasswordRecoveryRequestRepository {
@@ -143,6 +144,7 @@ function buildUser(overrides: Partial<UserEntity> = {}): UserEntity {
     lockedUntil: null,
     lastLoginAt: null,
     deletedAt: null,
+    mfaEnabled: false,
     ...overrides,
   };
 }

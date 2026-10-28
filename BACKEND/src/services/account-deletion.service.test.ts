@@ -33,6 +33,7 @@ function buildUser(overrides: Partial<UserEntity> = {}): UserEntity {
     lockedUntil: null,
     lastLoginAt: null,
     deletedAt: null,
+    mfaEnabled: false,
     ...overrides,
   };
 }
@@ -100,6 +101,7 @@ describe('DefaultAccountDeletionService', () => {
       updateLastLoginAt: jest.fn(),
       updatePasswordHash: jest.fn(),
       anonymizeAndMarkDeleted: jest.fn(),
+      updateMfaEnabled: jest.fn(),
     };
     deletionRequestRepository = {
       insert: jest.fn(),

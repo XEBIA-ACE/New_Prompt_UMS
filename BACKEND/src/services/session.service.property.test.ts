@@ -109,6 +109,7 @@ class FakeUserRepository implements IUserRepository {
   async updateLastLoginAt(): Promise<void> {}
   async updatePasswordHash(): Promise<void> {}
   async anonymizeAndMarkDeleted(): Promise<void> {}
+  async updateMfaEnabled(): Promise<void> {}
 }
 
 function buildSession(overrides: Partial<SessionEntity> = {}): SessionEntity {

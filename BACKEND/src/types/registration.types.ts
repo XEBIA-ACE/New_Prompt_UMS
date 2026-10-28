@@ -93,7 +93,11 @@ export interface UserEntity {
   lockedUntil: Date | null;               // F-03, default null — temporary lockout, distinct from `suspended`
   lastLoginAt: Date | null;               // F-03, default null
   deletedAt: Date | null;                 // F-04, default null — set once, never cleared
+  mfaEnabled: boolean;                    // MFA setting flag, default DEFAULT_MFA_ENABLED (FR-S1-001)
 }
+
+/** Default MFA setting for newly created and pre-existing users (FR-S1-001, FR-S1-002). */
+export const DEFAULT_MFA_ENABLED = false;
 
 /**
  * Single-use, time-bounded token for account activation (one per user).

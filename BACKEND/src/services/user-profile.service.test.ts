@@ -18,6 +18,7 @@ function buildUser(overrides: Partial<UserEntity> = {}): UserEntity {
     lockedUntil: null,
     lastLoginAt: new Date('2026-01-02T00:00:00.000Z'),
     deletedAt: null,
+    mfaEnabled: false,
     ...overrides,
   };
 }
@@ -40,6 +41,7 @@ describe('DefaultUserProfileService', () => {
       updateLastLoginAt: jest.fn(),
       updatePasswordHash: jest.fn(),
       anonymizeAndMarkDeleted: jest.fn(),
+      updateMfaEnabled: jest.fn(),
     };
     sessionRepository = {
       insert: jest.fn(),

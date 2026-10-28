@@ -61,6 +61,7 @@ function buildUser(overrides: Partial<UserEntity> = {}): UserEntity {
     lockedUntil: null,
     lastLoginAt: null,
     deletedAt: null,
+    mfaEnabled: false,
     ...overrides,
   };
 }
@@ -86,6 +87,7 @@ describe('DefaultOtpService', () => {
       updateLastLoginAt: jest.fn(),
       updatePasswordHash: jest.fn(),
       anonymizeAndMarkDeleted: jest.fn(),
+      updateMfaEnabled: jest.fn(),
     };
     otpRequestRepository = {
       create: jest.fn(async (record) => ({ id: 'otp-1', ...record })),

@@ -65,6 +65,7 @@ class FakeUserRepository implements IUserRepository {
     if (user) user.passwordHash = hash;
   }
   async anonymizeAndMarkDeleted(): Promise<void> {}
+  async updateMfaEnabled(): Promise<void> {}
 }
 
 class FakeSessionRepository implements ISessionRepository {
@@ -131,6 +132,7 @@ function buildUser(overrides: Partial<UserEntity> = {}): UserEntity {
     lockedUntil: null,
     lastLoginAt: null,
     deletedAt: null,
+    mfaEnabled: false,
     ...overrides,
   };
 }

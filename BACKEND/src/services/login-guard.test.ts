@@ -17,6 +17,7 @@ function buildUser(overrides: Partial<UserEntity> = {}): UserEntity {
     lockedUntil: null,
     lastLoginAt: null,
     deletedAt: null,
+    mfaEnabled: false,
     ...overrides,
   };
 }
@@ -38,6 +39,7 @@ describe('DefaultLoginGuard', () => {
       updateLastLoginAt: jest.fn(),
       updatePasswordHash: jest.fn(),
       anonymizeAndMarkDeleted: jest.fn(),
+      updateMfaEnabled: jest.fn(),
     };
     // threshold=5, lockoutMinutes=15 (defaults), passed explicitly for clarity
     guard = new DefaultLoginGuard(userRepository, 5, 15);

@@ -20,7 +20,7 @@ import bcrypt from 'bcrypt';
 import type { Database } from 'better-sqlite3';
 import { v4 as uuidv4 } from 'uuid';
 import { withTransaction } from '../db/with-transaction';
-import { RegistrationRequestDto, UserCreatedResult } from '../types/registration.types';
+import { DEFAULT_MFA_ENABLED, RegistrationRequestDto, UserCreatedResult } from '../types/registration.types';
 import { UsernameConflictError } from '../errors/registration.errors';
 import { appConfig } from '../config/app.config';
 
@@ -67,10 +67,18 @@ export class DefaultRegistrationService implements RegistrationService {
       await withTransaction(this.db, () => {
         this.db
           .prepare(
-            `INSERT INTO users (id, username, username_normalised, email, password_hash, status, registration_timestamp, activated_at)
-             VALUES (?, ?, ?, ?, ?, 'pending', ?, NULL)`,
+            `INSERT INTO users (id, username, username_normalised, email, password_hash, status, registration_timestamp, activated_at, mfa_enabled)
+             VALUES (?, ?, ?, ?, ?, 'pending', ?, NULL, ?)`,
           )
-          .run(userId, dto.username, usernameNormalised, dto.emailAddress, passwordHash, now.toISOString());
+          .run(
+            userId,
+            dto.username,
+            usernameNormalised,
+            dto.emailAddress,
+            passwordHash,
+            now.toISOString(),
+            DEFAULT_MFA_ENABLED ? 1 : 0,
+          );
       });
 
       return {

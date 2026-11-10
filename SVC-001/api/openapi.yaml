@@ -1,0 +1,68 @@
+openapi: 3.0.3
+info:
+  title: Customer Record Creation Service (SVC-001)
+  version: 0.0.0-scaffold
+  description: >
+    Scaffold stub for z/OS Connect EE exposure (configure only, no COBOL
+    changes). Derived from AGENTS.md because the referenced approved OpenAPI
+    (specs/SCAFFOLD-SVC-001/references/SVC-001.md) was not present in the
+    repository. Request/response bodies other than HealthResponse and the
+    CUSTOMER_SECURE exclusion rule are TODO.
+paths:
+  /api/v1/customers:
+    post:
+      summary: Create customer (maps to LGACDB01 COMMAREA invocation)
+      security: [{ ApiKey: [customer:create] }]
+      responses:
+        '501': { description: Not implemented (scaffold stub) }
+  /api/v1/customers/{customerNumber}:
+    get:
+      summary: Get customer from DB2 CUSTOMER table only
+      description: Never returns CUSTOMER_SECURE data.
+      security: [{ ApiKey: [customer:read] }]
+      parameters:
+        - { name: customerNumber, in: path, required: true, schema: { type: string } }
+      responses:
+        '501': { description: Not implemented (scaffold stub) }
+  /health:
+    get:
+      summary: Health check (backed by LGHLTH01)
+      security: []
+      responses:
+        '200':
+          description: All subsystems UP
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthResponse' }
+        '503':
+          description: Degraded or any subsystem DOWN
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthResponse' }
+  /api/v1/info:
+    get:
+      summary: API metadata (ApiInfoResponse)
+      security: []
+      responses:
+        '501': { description: Not implemented (scaffold stub; schema TODO) }
+components:
+  securitySchemes:
+    ApiKey: { type: apiKey, in: header, name: X-API-Key }
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, serviceId, timestamp, subsystems]
+      properties:
+        status: { type: string, enum: [UP, DOWN, DEGRADED] }
+        serviceId: { type: string, enum: [SVC-001] }
+        timestamp: { type: string, format: date-time }
+        subsystems:
+          type: object
+          properties:
+            db2Customer: { $ref: '#/components/schemas/SubsystemStatus' }
+            db2CustomerSecure: { $ref: '#/components/schemas/SubsystemStatus' }
+            vsamKsdscust: { $ref: '#/components/schemas/SubsystemStatus' }
+            cicsTransactionServer: { $ref: '#/components/schemas/SubsystemStatus' }
+    SubsystemStatus:
+      type: string
+      enum: [UP, DOWN, UNKNOWN]

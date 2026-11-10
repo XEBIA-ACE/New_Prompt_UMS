@@ -1,0 +1,10 @@
+root = true
+
+[*.{cbl,cpy,jcl}]
+charset = latin1
+end_of_line = lf
+indent_style = space
+insert_final_newline = true
+trim_trailing_whitespace = true
+# fixed-format COBOL: columns 73-80 must stay blank
+max_line_length = 72

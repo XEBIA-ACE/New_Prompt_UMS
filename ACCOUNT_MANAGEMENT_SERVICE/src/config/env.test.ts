@@ -12,6 +12,7 @@ describe('loadConfig', () => {
         ssl: false,
         poolMax: 10,
         connectionTimeoutMs: 5000,
+        queryTimeoutMs: 5000,
       },
     });
   });
@@ -24,6 +25,7 @@ describe('loadConfig', () => {
       DATABASE_SSL: 'true',
       DATABASE_POOL_MAX: '20',
       DATABASE_CONNECTION_TIMEOUT_MS: '1000',
+      DATABASE_QUERY_TIMEOUT_MS: '2000',
     });
     expect(config.port).toBe(8080);
     expect(config.nodeEnv).toBe('production');
@@ -32,6 +34,7 @@ describe('loadConfig', () => {
       ssl: true,
       poolMax: 20,
       connectionTimeoutMs: 1000,
+      queryTimeoutMs: 2000,
     });
   });
 

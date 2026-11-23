@@ -9,6 +9,7 @@ export function createPool(config: DatabaseConfig): Pool {
     ssl: config.ssl ? { rejectUnauthorized: true } : false,
     max: config.poolMax,
     connectionTimeoutMillis: config.connectionTimeoutMs,
+    query_timeout: config.queryTimeoutMs,
   });
   // Idle-client errors (e.g. server-side disconnects) would otherwise crash the process.
   pool.on('error', (err) => {

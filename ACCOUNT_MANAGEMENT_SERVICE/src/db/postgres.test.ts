@@ -8,10 +8,12 @@ describe('createPool', () => {
       ssl: false,
       poolMax: 7,
       connectionTimeoutMs: 1234,
+      queryTimeoutMs: 4321,
     });
     expect(pool).toBeInstanceOf(Pool);
     expect(pool.options.max).toBe(7);
     expect(pool.options.connectionTimeoutMillis).toBe(1234);
+    expect(pool.options.query_timeout).toBe(4321);
     await pool.end();
   });
 
@@ -21,6 +23,7 @@ describe('createPool', () => {
       ssl: false,
       poolMax: 1,
       connectionTimeoutMs: 1000,
+      queryTimeoutMs: 1000,
     });
     const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
     expect(pool.listenerCount('error')).toBe(1);

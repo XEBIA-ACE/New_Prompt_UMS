@@ -4,6 +4,7 @@ export interface DatabaseConfig {
   ssl: boolean;
   poolMax: number;
   connectionTimeoutMs: number;
+  queryTimeoutMs: number;
 }
 
 export interface ServiceConfig {
@@ -69,6 +70,7 @@ export function loadConfig(env: Env = process.env): ServiceConfig {
       ssl: readBoolean(env, 'DATABASE_SSL', false),
       poolMax: readPositiveInt(env, 'DATABASE_POOL_MAX', 10),
       connectionTimeoutMs: readPositiveInt(env, 'DATABASE_CONNECTION_TIMEOUT_MS', 5000),
+      queryTimeoutMs: readPositiveInt(env, 'DATABASE_QUERY_TIMEOUT_MS', 5000),
     },
   };
 }

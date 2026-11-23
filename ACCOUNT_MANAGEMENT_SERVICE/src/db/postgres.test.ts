@@ -14,6 +14,20 @@ describe('createPool', () => {
     expect(pool.options.connectionTimeoutMillis).toBe(1234);
     await pool.end();
   });
+
+  it('handles idle client errors instead of crashing', async () => {
+    const pool = createPool({
+      connectionString: 'postgres://user:pw@localhost:5432/accounts',
+      ssl: false,
+      poolMax: 1,
+      connectionTimeoutMs: 1000,
+    });
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    expect(pool.listenerCount('error')).toBe(1);
+    expect(() => pool.emit('error', new Error('terminated'), {} as never)).not.toThrow();
+    spy.mockRestore();
+    await pool.end();
+  });
 });
 
 describe('isDatabaseReachable', () => {

@@ -65,8 +65,11 @@ describe('loadConfig', () => {
     }
   });
 
-  it('accepts the postgresql:// scheme', () => {
-    const url = 'postgresql://user:secret@db.internal:5432/accounts';
+  it.each([
+    'postgresql://user:secret@db.internal:5432/accounts',
+    'postgres://user:secret@/accounts?host=/var/run/postgresql',
+    'socket:/var/run/postgresql?db=accounts',
+  ])('accepts valid DATABASE_URL %s', (url) => {
     expect(loadConfig({ DATABASE_URL: url }).database.connectionString).toBe(url);
   });
 

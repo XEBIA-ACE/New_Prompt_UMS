@@ -1,3 +1,5 @@
+import { parse } from 'pg-connection-string';
+
 export interface DatabaseConfig {
   /** Never log or expose this value: it may contain credentials. */
   connectionString: string;
@@ -63,14 +65,13 @@ function readBoolean(env: Env, key: string, defaultValue: boolean): boolean {
 
 function requirePostgresUrl(env: Env, key: string): string {
   const value = requireString(env, key);
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new ConfigError(`'${key}' is not a valid URL.`);
+  if (!/^(postgres|postgresql|socket):/i.test(value)) {
+    throw new ConfigError(`'${key}' must use the postgres://, postgresql:// or socket: scheme.`);
   }
-  if (url.protocol !== 'postgres:' && url.protocol !== 'postgresql:') {
-    throw new ConfigError(`'${key}' must use the postgres:// or postgresql:// scheme.`);
+  try {
+    parse(value);
+  } catch {
+    throw new ConfigError(`'${key}' is not a valid PostgreSQL connection string.`);
   }
   return value;
 }

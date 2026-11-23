@@ -61,12 +61,26 @@ function readBoolean(env: Env, key: string, defaultValue: boolean): boolean {
   throw new ConfigError(`'${key}' must be 'true' or 'false', got '${raw}'.`);
 }
 
+function requirePostgresUrl(env: Env, key: string): string {
+  const value = requireString(env, key);
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new ConfigError(`'${key}' is not a valid URL.`);
+  }
+  if (url.protocol !== 'postgres:' && url.protocol !== 'postgresql:') {
+    throw new ConfigError(`'${key}' must use the postgres:// or postgresql:// scheme.`);
+  }
+  return value;
+}
+
 export function loadConfig(env: Env = process.env): ServiceConfig {
   return {
     port: readPositiveInt(env, 'PORT', 3000),
     nodeEnv: readString(env, 'NODE_ENV') ?? 'development',
     database: {
-      connectionString: requireString(env, 'DATABASE_URL'),
+      connectionString: requirePostgresUrl(env, 'DATABASE_URL'),
       ssl: readBoolean(env, 'DATABASE_SSL', false),
       poolMax: readPositiveInt(env, 'DATABASE_POOL_MAX', 10),
       connectionTimeoutMs: readPositiveInt(env, 'DATABASE_CONNECTION_TIMEOUT_MS', 5000),

@@ -52,6 +52,24 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ DATABASE_URL, [key]: value })).toThrow(ConfigError);
   });
 
+  it.each([
+    'not a url',
+    'postgres://user:secret@db.internal:abc/accounts',
+    'mysql://user:secret@db.internal:3306/accounts',
+  ])('rejects malformed DATABASE_URL %s without echoing it', (value) => {
+    expect(() => loadConfig({ DATABASE_URL: value })).toThrow(ConfigError);
+    try {
+      loadConfig({ DATABASE_URL: value });
+    } catch (err) {
+      expect((err as Error).message).not.toContain('secret');
+    }
+  });
+
+  it('accepts the postgresql:// scheme', () => {
+    const url = 'postgresql://user:secret@db.internal:5432/accounts';
+    expect(loadConfig({ DATABASE_URL: url }).database.connectionString).toBe(url);
+  });
+
   it('never includes the connection string in error messages', () => {
     try {
       loadConfig({ DATABASE_URL, PORT: 'bad' });

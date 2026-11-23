@@ -27,6 +27,7 @@ See `.env.example`.
 | `DATABASE_SSL`                   | no       | `false`       |
 | `DATABASE_POOL_MAX`              | no       | `10`          |
 | `DATABASE_CONNECTION_TIMEOUT_MS` | no       | `5000`        |
+| `DATABASE_QUERY_TIMEOUT_MS`      | no       | `5000`        |
 
 The service fails fast at startup if `DATABASE_URL` is missing or a value is invalid.
 Configuration values are never logged.
